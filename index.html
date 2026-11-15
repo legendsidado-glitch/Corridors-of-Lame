@@ -1,0 +1,3942 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>THE CORRIDOR — 3D Survival Horror</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js r128 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #050507;
+            color: #e4e4e7;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+        }
+        .font-horror { font-family: 'Cinzel', serif; }
+        .font-mono-code { font-family: 'JetBrains Mono', monospace; }
+
+        /* Custom Scrollbar for Menus & Modals */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(15, 15, 20, 0.8); }
+        ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 9999px; }
+        ::-webkit-scrollbar-thumb:hover { background: #71717a; }
+
+        /* Vignette & Horror Screen Effects */
+        .horror-vignette {
+            background: radial-gradient(circle at center, transparent 48%, rgba(0, 0, 0, 0.78) 100%);
+            pointer-events: none;
+        }
+        .damage-vignette {
+            background: radial-gradient(circle at center, transparent 35%, rgba(185, 28, 28, 0.85) 100%);
+            pointer-events: none;
+            transition: opacity 0.25s ease;
+        }
+        .abyss-vignette {
+            background: radial-gradient(circle at center, transparent 38%, rgba(8, 12, 28, 0.94) 100%);
+            pointer-events: none;
+        }
+
+        /* Jumpscare Shake Animation */
+        @keyframes violentShake {
+            0% { transform: translate(0, 0) rotate(0deg) scale(1.05); }
+            15% { transform: translate(-18px, 12px) rotate(-3deg) scale(1.12); }
+            30% { transform: translate(20px, -15px) rotate(3deg) scale(1.08); }
+            45% { transform: translate(-16px, -10px) rotate(-2deg) scale(1.15); }
+            60% { transform: translate(15px, 16px) rotate(2deg) scale(1.1); }
+            75% { transform: translate(-12px, 8px) rotate(-1deg) scale(1.14); }
+            100% { transform: translate(0, 0) rotate(0deg) scale(1.05); }
+        }
+        .jumpscare-active {
+            animation: violentShake 0.12s infinite;
+        }
+
+        /* Unified Glassmorphic Transparent Animated Buttons */
+        @keyframes pulseCrimsonGlow {
+            0%, 100% {
+                box-shadow: 0 0 18px rgba(220, 38, 38, 0.25), inset 0 0 12px rgba(220, 38, 38, 0.15);
+            }
+            50% {
+                box-shadow: 0 0 34px rgba(239, 68, 68, 0.55), inset 0 0 20px rgba(239, 68, 68, 0.3);
+            }
+        }
+        @keyframes shimmerSweep {
+            0% { transform: translateX(-140%) skewX(-20deg); }
+            100% { transform: translateX(260%) skewX(-20deg); }
+        }
+        .glass-btn {
+            position: relative;
+            overflow: hidden;
+            background: linear-gradient(135deg, rgba(136, 19, 25, 0.44), rgba(28, 25, 36, 0.52));
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-color: rgba(248, 113, 113, 0.36);
+            transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+                        background-color 0.25s ease,
+                        border-color 0.25s ease,
+                        box-shadow 0.25s ease;
+        }
+        .glass-btn::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 45%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.16), transparent);
+            transform: translateX(-140%) skewX(-20deg);
+            pointer-events: none;
+        }
+        .glass-btn:hover::after {
+            animation: shimmerSweep 0.85s ease forwards;
+        }
+        .glass-btn:hover {
+            transform: translateY(-2px) scale(1.015);
+            background: linear-gradient(135deg, rgba(185, 28, 28, 0.58), rgba(45, 38, 52, 0.65));
+            border-color: rgba(252, 165, 165, 0.68);
+        }
+        .glass-btn:active {
+            transform: scale(0.98);
+        }
+        .btn-horror-primary {
+            animation: pulseCrimsonGlow 3s infinite ease-in-out;
+        }
+        .glass-panel {
+            background: rgba(10, 10, 15, 0.44);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+    </style>
+</head>
+<body class="w-screen h-screen relative overflow-hidden">
+
+    <!-- 3D WebGL Canvas (Live Haunted Lobby on Menu + Full 3D Game World) -->
+    <canvas id="game-canvas" class="fixed inset-0 w-full h-full block z-0"></canvas>
+
+    <!-- Atmospheric Overlays -->
+    <div id="base-vignette" class="fixed inset-0 horror-vignette z-10"></div>
+    <div id="damage-overlay" class="fixed inset-0 damage-vignette opacity-0 z-10"></div>
+    <div id="abyss-overlay" class="fixed inset-0 abyss-vignette opacity-0 z-10"></div>
+
+    <!-- Floating Toast Notification System -->
+    <div id="toast-container" class="fixed top-5 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 items-center pointer-events-none w-full max-w-md px-4"></div>
+
+    <!-- ==================== 1. HOMEPAGE / MAIN MENU (SCROLLABLE) ==================== -->
+    <div id="main-menu" class="fixed inset-0 z-30 overflow-y-auto overflow-x-hidden flex flex-col justify-between p-6 md:p-12 bg-gradient-to-b from-black/45 via-transparent to-black/65 transition-opacity duration-500" style="touch-action: pan-y;">
+        <!-- Top Bar: Title & Currency -->
+        <div class="flex flex-wrap items-start justify-between gap-4">
+            <div>
+                <div class="inline-flex flex-wrap items-center gap-2 px-3 py-1 rounded-full bg-red-950/45 backdrop-blur-md border border-red-500/40 text-red-300 text-xs font-semibold tracking-widest uppercase mb-3">
+                    <span class="w-2 h-2 rounded-full bg-red-500 animate-ping"></span>
+                    <span>100 DOORS + THE ABYSS (-100 TO 0)</span>
+                    <span id="device-mode-badge" class="ml-1 px-2 py-0.5 rounded bg-black/50 border border-zinc-600/60 text-zinc-200 font-mono-code text-[10px]">🖥️ PC MODE</span>
+                </div>
+                <h1 class="font-horror text-5xl md:text-7xl font-extrabold tracking-wider text-white drop-shadow-[0_6px_28px_rgba(0,0,0,0.95)]">
+                    THE CORRIDOR
+                </h1>
+                <p class="text-zinc-200 text-sm md:text-base max-w-xl mt-2 leading-relaxed drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)]">
+                    Search wooden drawers, hide inside creaking closets, read the entity signs, and survive to Door 100 to descend into <span class="text-sky-300 font-semibold">The Abyss</span>.
+                </p>
+            </div>
+
+            <!-- Stats & Coins Card -->
+            <div class="glass-panel flex items-center gap-3 border border-white/15 px-5 py-3.5 rounded-2xl shadow-2xl">
+                <div class="text-right">
+                    <div class="text-[11px] uppercase tracking-wider text-zinc-300 font-semibold">Soul Coins</div>
+                    <div id="menu-coins" class="text-2xl font-bold text-amber-400 font-mono-code">0</div>
+                </div>
+                <div class="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-400/35 flex items-center justify-center text-amber-400 text-xl">
+                    🪙
+                </div>
+                <div class="h-8 w-[1px] bg-white/15 mx-1"></div>
+                <div class="text-left">
+                    <div class="text-[11px] uppercase tracking-wider text-zinc-300 font-semibold">Best Room</div>
+                    <div id="menu-best-room" class="text-lg font-bold text-white font-mono-code">Door 0</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Center Navigation & Difficulty Selector -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center my-auto py-6">
+            <!-- Left Primary Unified Glassmorphic Buttons -->
+            <div class="lg:col-span-5 flex flex-col gap-3.5 max-w-md">
+                <button onclick="openPlayPanel()" class="glass-btn btn-horror-primary group flex items-center justify-between px-6 py-4 rounded-2xl border text-white font-bold text-lg tracking-wide shadow-xl">
+                    <span class="flex items-center gap-3">
+                        <span class="text-2xl group-hover:scale-110 transition-transform">🚪</span>
+                        <span>ENTER THE CORRIDOR</span>
+                    </span>
+                    <span class="text-red-200 group-hover:translate-x-1.5 transition-transform">→</span>
+                </button>
+
+                <button onclick="openModal('shop-modal')" class="glass-btn group flex items-center justify-between px-6 py-4 rounded-2xl border text-zinc-100 font-semibold text-base shadow-lg">
+                    <span class="flex items-center gap-3">
+                        <span class="text-xl group-hover:rotate-12 transition-transform">🛒</span>
+                        <span>ARMORY, CRATES & POTIONS</span>
+                    </span>
+                    <span class="text-xs px-2.5 py-1 rounded-lg bg-black/35 text-red-200 border border-red-400/30">SHOP</span>
+                </button>
+
+                <button onclick="openModal('settings-modal')" class="glass-btn group flex items-center justify-between px-6 py-4 rounded-2xl border text-zinc-100 font-semibold text-base shadow-lg">
+                    <span class="flex items-center gap-3">
+                        <span class="text-xl group-hover:rotate-45 transition-transform duration-300">⚙️</span>
+                        <span>SETTINGS & CODES</span>
+                    </span>
+                    <span class="text-xs px-2.5 py-1 rounded-lg bg-black/35 text-red-200 border border-red-400/30">GRAPHICS / CODE</span>
+                </button>
+
+                <button onclick="openModal('guide-modal')" class="glass-btn group flex items-center justify-between px-6 py-3.5 rounded-2xl border text-zinc-200 font-medium text-sm">
+                    <span class="flex items-center gap-3">
+                        <span class="text-lg">📖</span>
+                        <span>ENTITY FIELD GUIDE (SIGNS & SURVIVAL)</span>
+                    </span>
+                    <span class="text-red-200 group-hover:scale-125 transition-transform">?</span>
+                </button>
+
+                <!-- Admin Button (Appears once unlocked with Legend.AymanGaming2024) -->
+                <button id="menu-admin-btn" onclick="openModal('admin-modal')" class="hidden glass-btn group flex items-center justify-between px-6 py-3.5 rounded-2xl border text-zinc-100 font-bold text-sm shadow-[0_0_24px_rgba(220,38,38,0.35)]">
+                    <span class="flex items-center gap-3">
+                        <span class="text-lg">👑</span>
+                        <span>AYMANGAMING ADMIN CONSOLE</span>
+                    </span>
+                    <span class="text-xs px-2 py-0.5 rounded bg-black/35 text-red-200 font-mono-code">ACTIVE</span>
+                </button>
+            </div>
+
+            <!-- Right Difficulty & Mode Selector Card -->
+            <div id="play-panel" class="lg:col-span-7 glass-panel border border-white/15 rounded-3xl p-6 md:p-8 shadow-2xl">
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+                    <div>
+                        <h2 class="font-horror text-2xl font-bold text-white">SELECT EXPEDITION</h2>
+                        <p class="text-xs text-zinc-300">Higher difficulties multiply Coin rewards per door cleared.</p>
+                    </div>
+                    <span id="abyss-unlock-badge" class="px-3 py-1 rounded-full text-xs font-semibold bg-black/45 border border-white/15 text-zinc-300">
+                        🔒 Beat Door 100 to Unlock Abyss
+                    </span>
+                </div>
+
+                <!-- Difficulty Grid (Unified Glassmorphic Button Color) -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+                    <button onclick="selectDifficulty('normal')" id="diff-normal" class="glass-btn diff-card text-left p-4 rounded-2xl border-2 border-red-400">
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="font-bold text-white">Explorer</span>
+                            <span class="text-xs font-mono-code text-amber-300">1.0x 🪙</span>
+                        </div>
+                        <p class="text-xs text-zinc-200 leading-relaxed">Balanced entity cues, forgiving stamina, standard battery drain.</p>
+                    </button>
+
+                    <button onclick="selectDifficulty('nightmare')" id="diff-nightmare" class="glass-btn diff-card text-left p-4 rounded-2xl border">
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="font-bold text-white">Nightmare</span>
+                            <span class="text-xs font-mono-code text-amber-300">2.0x 🪙</span>
+                        </div>
+                        <p class="text-xs text-zinc-200 leading-relaxed">Faster entities, shorter warning windows, extra locked quests.</p>
+                    </button>
+
+                    <button onclick="selectDifficulty('abyssal')" id="diff-abyssal" class="glass-btn diff-card text-left p-4 rounded-2xl border">
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="font-bold text-white">Abyssal</span>
+                            <span class="text-xs font-mono-code text-amber-300">3.5x 🪙</span>
+                        </div>
+                        <p class="text-xs text-zinc-200 leading-relaxed">Pitch black corridors, lethal ambushes, maximum coin yield.</p>
+                    </button>
+                </div>
+
+                <!-- Start Mode Buttons (Unified Glassmorphic Button Color) -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <button onclick="startGame('corridor')" class="glass-btn py-3.5 px-5 rounded-xl border text-white font-bold text-sm tracking-wide shadow-lg flex items-center justify-center gap-2">
+                        <span>🚪 START AT DOOR 001</span>
+                    </button>
+                    <button id="btn-start-abyss" onclick="startGame('abyss')" class="glass-btn py-3.5 px-5 rounded-xl border text-white font-bold text-sm tracking-wide flex items-center justify-center gap-2 opacity-75">
+                        <span>🌌 ENTER THE ABYSS (-100 → 0)</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Footer: Equipped Loadout Preview, Vocal Audio Toggle & Control Switcher -->
+        <div class="flex flex-wrap items-center justify-between gap-4 border-t border-white/15 pt-4 text-xs text-zinc-200">
+            <div class="flex flex-wrap items-center gap-4">
+                <div>Flashlight: <span id="hud-menu-flashlight" class="text-white font-semibold">Standard Brass</span></div>
+                <div>Accessory: <span id="hud-menu-accessory" class="text-amber-300 font-semibold">None</span></div>
+                <div>Potions Ready: <span id="hud-menu-potions" class="text-emerald-300 font-semibold">0 Speed | 0 Invisibility</span></div>
+            </div>
+            <div class="flex flex-wrap items-center gap-2.5">
+                <button onclick="toggleMenuChoir()" id="btn-toggle-choir" class="glass-btn px-3 py-1.5 rounded-lg border text-zinc-100 font-mono-code text-[11px]">
+                    🎵 Vocal Ambience: ON
+                </button>
+                <button onclick="toggleDeviceModeOverride()" id="btn-switch-device" class="glass-btn px-3 py-1.5 rounded-lg border text-zinc-100 font-mono-code text-[11px]">
+                    Switch Control Mode
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 2. IN-GAME HUD ==================== -->
+    <div id="game-hud" class="hidden fixed inset-0 z-20 pointer-events-none flex flex-col justify-between p-4 md:p-6">
+        <!-- Top Row: Room Counter, Quest Objective, Coins, Admin/Pause -->
+        <div class="flex flex-wrap items-start justify-between gap-3">
+            <div class="flex items-center gap-3">
+                <div class="bg-zinc-950/80 border border-zinc-800/90 backdrop-blur-md px-4 py-2.5 rounded-2xl shadow-xl">
+                    <div id="hud-zone-label" class="text-[10px] uppercase tracking-widest text-red-400 font-bold">THE CORRIDOR</div>
+                    <div id="hud-room-number" class="font-horror text-2xl md:text-3xl font-extrabold text-white">DOOR 001</div>
+                </div>
+
+                <!-- Quest Tracker Card -->
+                <div id="hud-quest-box" class="bg-zinc-950/80 border border-amber-500/30 backdrop-blur-md px-4 py-2.5 rounded-2xl shadow-xl max-w-xs">
+                    <div class="text-[10px] uppercase tracking-wider text-amber-400 font-bold flex items-center gap-1.5">
+                        <span>⚡ CURRENT OBJECTIVE</span>
+                    </div>
+                    <div id="hud-quest-text" class="text-xs md:text-sm text-zinc-200 font-medium mt-0.5">
+                        Proceed through Door 001.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Top: Coins & Quick Controls -->
+            <div class="flex items-center gap-2.5 pointer-events-auto">
+                <div class="bg-zinc-950/80 border border-zinc-800 px-3.5 py-2 rounded-xl flex items-center gap-2 backdrop-blur-md">
+                    <span class="text-amber-400">🪙</span>
+                    <span id="hud-coins" class="font-mono-code font-bold text-amber-300 text-sm">0</span>
+                </div>
+                <button id="hud-admin-btn" onclick="openModal('admin-modal')" class="hidden px-3 py-2 rounded-xl bg-purple-950/90 border border-purple-500/60 text-purple-200 text-xs font-bold shadow-lg">
+                    👑 ADMIN
+                </button>
+                <button onclick="toggleDeviceModeOverride()" class="px-3 py-2 rounded-xl bg-zinc-950/80 border border-zinc-800 hover:border-zinc-600 text-zinc-300 text-xs font-mono-code backdrop-blur-md">
+                    📱/🖥️
+                </button>
+                <button onclick="pauseToMenu()" class="px-3.5 py-2 rounded-xl bg-zinc-950/80 border border-zinc-800 hover:border-zinc-600 text-zinc-300 text-xs font-semibold backdrop-blur-md">
+                    MENU [ESC]
+                </button>
+            </div>
+        </div>
+
+        <!-- Center Warning Banner (Entity Signs & Interaction Prompts) -->
+        <div class="flex flex-col items-center justify-center gap-3 my-auto">
+            <div id="entity-sign-banner" class="hidden px-5 py-2.5 rounded-2xl bg-red-950/90 border border-red-500/70 text-red-200 text-xs md:text-sm font-bold tracking-wider uppercase shadow-[0_0_30px_rgba(220,38,38,0.6)] animate-bounce text-center">
+                ⚠️ THE LIGHTS ARE FLICKERING — HIDE IN A CLOSET NOW!
+            </div>
+
+            <div id="crosshair" class="w-2.5 h-2.5 rounded-full border border-white/70 bg-white/20 transition-transform duration-150"></div>
+
+            <div id="interact-prompt" class="hidden px-4 py-1.5 rounded-xl bg-black/80 border border-zinc-600 text-white text-xs font-semibold tracking-wide backdrop-blur-md">
+                Press <span class="text-amber-400 font-mono-code">[E]</span> or Click to Interact
+            </div>
+
+            <div id="hiding-banner" class="hidden px-5 py-2 rounded-xl bg-emerald-950/85 border border-emerald-500/50 text-emerald-200 text-xs font-semibold">
+                🚪 HIDING IN CLOSET — Hold Breath... Press [E] to Exit
+            </div>
+        </div>
+
+        <!-- Bottom Row: Health, Stamina, Flashlight Battery, Abyss Light Meter & Potions -->
+        <div class="flex flex-wrap items-end justify-between gap-4">
+            <div class="bg-zinc-950/80 border border-zinc-800/90 backdrop-blur-md p-3.5 rounded-2xl w-full max-w-sm space-y-2.5 shadow-xl">
+                <div>
+                    <div class="flex justify-between text-[11px] font-semibold mb-1">
+                        <span class="text-red-400">❤️ VITALITY</span>
+                        <span id="hud-hp-text" class="font-mono-code text-zinc-300">100 / 100</span>
+                    </div>
+                    <div class="w-full h-2 bg-zinc-900 rounded-full overflow-hidden">
+                        <div id="hud-hp-bar" class="h-full bg-gradient-to-r from-red-700 to-red-500 transition-all duration-200" style="width: 100%"></div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="flex justify-between text-[11px] font-semibold mb-1">
+                        <span class="text-emerald-400">⚡ STAMINA [SHIFT]</span>
+                        <span id="hud-stam-text" class="font-mono-code text-zinc-300">100%</span>
+                    </div>
+                    <div class="w-full h-1.5 bg-zinc-900 rounded-full overflow-hidden">
+                        <div id="hud-stam-bar" class="h-full bg-emerald-500 transition-all duration-100" style="width: 100%"></div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="flex justify-between text-[11px] font-semibold mb-1">
+                        <span class="text-amber-400">🔦 BATTERY [F] | OVERCHARGE [RMB]</span>
+                        <span id="hud-bat-text" class="font-mono-code text-zinc-300">100%</span>
+                    </div>
+                    <div class="w-full h-1.5 bg-zinc-900 rounded-full overflow-hidden">
+                        <div id="hud-bat-bar" class="h-full bg-amber-400 transition-all duration-150" style="width: 100%"></div>
+                    </div>
+                </div>
+
+                <div id="hud-abyss-meter" class="hidden pt-1 border-t border-sky-900/60">
+                    <div class="flex justify-between text-[11px] font-bold mb-1">
+                        <span class="text-sky-400 animate-pulse">✨ ABYSSAL SOUL LIGHT (COLLECT ORBS!)</span>
+                        <span id="hud-abyss-text" class="font-mono-code text-sky-300">100%</span>
+                    </div>
+                    <div class="w-full h-2 bg-sky-950 rounded-full overflow-hidden">
+                        <div id="hud-abyss-bar" class="h-full bg-gradient-to-r from-sky-600 to-cyan-300 transition-all duration-150" style="width: 100%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Consumable Potions Hotbar & Controls Hint -->
+            <div class="flex flex-col items-end gap-2 pointer-events-auto">
+                <div class="flex items-center gap-2">
+                    <button onclick="usePotion('speed')" class="px-3.5 py-2.5 rounded-xl bg-zinc-950/85 hover:bg-emerald-950/80 border border-emerald-500/40 text-left transition flex items-center gap-2.5 shadow-lg backdrop-blur-md">
+                        <span class="text-lg">🧪</span>
+                        <div>
+                            <div class="text-[11px] font-bold text-emerald-300">[1] Speed Potion</div>
+                            <div id="hud-speed-count" class="text-[10px] font-mono-code text-zinc-400">Owned: 0</div>
+                        </div>
+                    </button>
+
+                    <button onclick="usePotion('invis')" class="px-3.5 py-2.5 rounded-xl bg-zinc-950/85 hover:bg-indigo-950/80 border border-indigo-500/40 text-left transition flex items-center gap-2.5 shadow-lg backdrop-blur-md">
+                        <span class="text-lg">👻</span>
+                        <div>
+                            <div class="text-[11px] font-bold text-indigo-300">[2] Invisibility</div>
+                            <div id="hud-invis-count" class="text-[10px] font-mono-code text-zinc-400">Owned: 0</div>
+                        </div>
+                    </button>
+                </div>
+
+                <div id="active-buffs-bar" class="flex gap-2 text-[11px] font-mono-code"></div>
+
+                <div class="hidden md:block text-[11px] text-zinc-400 bg-black/60 px-3 py-1 rounded-lg border border-zinc-800/80">
+                    WASD: Move • Mouse: Look (Look down to see body) • E: Open Drawers/Closets/Doors • Hold RMB: Light Blast
+                </div>
+            </div>
+        </div>
+
+        <!-- Mobile / Tablet Touch Controls -->
+        <div id="mobile-controls" class="hidden fixed bottom-24 left-4 right-4 justify-between items-end pointer-events-none z-30">
+            <div id="touch-move-zone" class="w-32 h-32 rounded-full bg-white/10 border border-white/25 backdrop-blur-md pointer-events-auto flex items-center justify-center relative shadow-2xl">
+                <div id="touch-move-knob" class="w-12 h-12 rounded-full bg-red-600/85 border border-red-300/50 shadow-lg"></div>
+            </div>
+
+            <div class="flex flex-col items-end gap-2.5 pointer-events-auto">
+                <div id="touch-look-zone" class="w-40 h-24 rounded-2xl bg-white/5 border border-white/15 backdrop-blur-sm flex items-center justify-center text-[10px] text-zinc-300 font-mono-code tracking-wider uppercase">
+                    Drag Here to Look
+                </div>
+                <div class="flex gap-2 justify-end">
+                    <button id="btn-mobile-sprint" ontouchstart="mobileSprint=true" ontouchend="mobileSprint=false" class="px-3.5 py-3 rounded-xl bg-emerald-900/85 border border-emerald-400/40 text-emerald-100 font-bold text-xs shadow-lg">SPRINT</button>
+                    <button ontouchstart="triggerInteract()" class="px-4 py-3 rounded-xl bg-amber-600/90 border border-amber-300/40 text-white font-bold text-xs shadow-lg">INTERACT</button>
+                </div>
+                <div class="flex gap-2 justify-end">
+                    <button ontouchstart="toggleFlashlight()" class="px-3.5 py-3.5 rounded-xl bg-zinc-900/90 border border-zinc-600 text-white font-bold text-xs shadow-lg">🔦 LIGHT</button>
+                    <button ontouchstart="state.combatBeam=true" ontouchend="state.combatBeam=false" class="px-4 py-3.5 rounded-xl bg-red-700/90 border border-red-400/50 text-white font-bold text-xs shadow-lg">🔥 BLAST</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 3. SHOP MODAL (ARMORY, CRATES & UPGRADES) ==================== -->
+    <div id="shop-modal" class="hidden fixed inset-0 z-40 bg-black/80 backdrop-blur-md flex items-center justify-center p-4" style="touch-action: pan-y;">
+        <div class="bg-zinc-950/95 border border-zinc-800 rounded-3xl w-full max-w-4xl max-h-[88vh] flex flex-col overflow-hidden shadow-2xl">
+            <div class="flex items-center justify-between p-6 border-b border-zinc-800">
+                <div>
+                    <h2 class="font-horror text-2xl font-bold text-white">THE SHADOW ARMORY</h2>
+                    <p class="text-xs text-zinc-400">Equip flashlights, unlock body accessories from crates, and brew survival potions.</p>
+                </div>
+                <div class="flex items-center gap-4">
+                    <div class="px-4 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 font-mono-code font-bold text-sm">
+                        🪙 <span id="shop-coins">0</span>
+                    </div>
+                    <button onclick="closeModal('shop-modal')" class="w-9 h-9 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center font-bold">✕</button>
+                </div>
+            </div>
+
+            <div class="flex gap-2 px-6 pt-4 border-b border-zinc-800/80 pb-3 overflow-x-auto">
+                <button onclick="switchShopTab('flashlights')" id="tab-flashlights" class="shop-tab px-4 py-2 rounded-xl bg-red-600 text-white text-xs font-bold">🔦 Flashlights & Weapons</button>
+                <button onclick="switchShopTab('potions')" id="tab-potions" class="shop-tab px-4 py-2 rounded-xl bg-zinc-900 text-zinc-400 hover:text-white text-xs font-bold">🧪 Potions & Tools</button>
+                <button onclick="switchShopTab('crates')" id="tab-crates" class="shop-tab px-4 py-2 rounded-xl bg-zinc-900 text-zinc-400 hover:text-white text-xs font-bold">🎁 Accessory Crates</button>
+                <button onclick="switchShopTab('upgrades')" id="tab-upgrades" class="shop-tab px-4 py-2 rounded-xl bg-zinc-900 text-zinc-400 hover:text-white text-xs font-bold">🧬 Body Upgrades</button>
+            </div>
+
+            <div id="shop-content" class="p-6 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+        </div>
+    </div>
+
+    <!-- ==================== 4. SETTINGS & CODE MODAL ==================== -->
+    <div id="settings-modal" class="hidden fixed inset-0 z-40 bg-black/80 backdrop-blur-md flex items-center justify-center p-4" style="touch-action: pan-y;">
+        <div class="bg-zinc-950/95 border border-zinc-800 rounded-3xl w-full max-w-xl overflow-hidden shadow-2xl">
+            <div class="flex items-center justify-between p-6 border-b border-zinc-800">
+                <h2 class="font-horror text-2xl font-bold text-white">SETTINGS & SECRET CODES</h2>
+                <button onclick="closeModal('settings-modal')" class="w-9 h-9 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center font-bold">✕</button>
+            </div>
+
+            <div class="p-6 space-y-6 max-h-[80vh] overflow-y-auto">
+                <div>
+                    <label class="block text-xs uppercase tracking-wider text-zinc-400 font-bold mb-2">Graphics & Realism Preset</label>
+                    <div class="grid grid-cols-3 gap-2.5">
+                        <button onclick="setGraphics('low')" id="gfx-low" class="gfx-btn py-2.5 rounded-xl border border-zinc-800 bg-zinc-900 text-xs font-semibold text-zinc-300">Performance</button>
+                        <button onclick="setGraphics('medium')" id="gfx-medium" class="gfx-btn py-2.5 rounded-xl border border-zinc-800 bg-zinc-900 text-xs font-semibold text-zinc-300">High Realism</button>
+                        <button onclick="setGraphics('ultra')" id="gfx-ultra" class="gfx-btn py-2.5 rounded-xl border-2 border-red-500 bg-red-950/30 text-xs font-bold text-white">Ultra Shadows</button>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="flex justify-between text-xs font-bold mb-1.5">
+                        <span class="text-zinc-400 uppercase tracking-wider">Look Sensitivity</span>
+                        <span id="sens-val" class="text-zinc-200 font-mono-code">1.0x</span>
+                    </div>
+                    <input type="range" min="0.3" max="2.5" step="0.1" value="1.0" oninput="setSensitivity(this.value)" class="w-full accent-red-500">
+                </div>
+
+                <div>
+                    <div class="flex justify-between text-xs font-bold mb-1.5">
+                        <span class="text-zinc-400 uppercase tracking-wider">Master Horror SFX & Vocal Volume</span>
+                        <span id="vol-val" class="text-zinc-200 font-mono-code">80%</span>
+                    </div>
+                    <input type="range" min="0" max="1" step="0.05" value="0.8" oninput="setVolume(this.value)" class="w-full accent-red-500">
+                </div>
+
+                <div class="pt-4 border-t border-zinc-800">
+                    <label class="block text-xs uppercase tracking-wider text-amber-400 font-bold mb-2">🔑 Promo & Developer Code Area</label>
+                    <div class="flex gap-2">
+                        <input id="code-input" type="text" placeholder="Enter secret or creator code..." class="flex-1 px-4 py-3 rounded-xl bg-zinc-900 border border-zinc-700 focus:border-red-500 focus:outline-none text-sm text-white font-mono-code">
+                        <button onclick="redeemCode()" class="px-5 py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs tracking-wider uppercase transition">
+                            REDEEM
+                        </button>
+                    </div>
+                    <p class="text-[11px] text-zinc-500 mt-2">Try starter code <span class="text-zinc-300 font-mono-code">SHADOW100</span> or enter creator codes.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 5. FIRST-TIME TUTORIAL / ENTITY GUIDE MODAL ==================== -->
+    <div id="guide-modal" class="hidden fixed inset-0 z-40 bg-black/80 backdrop-blur-md flex items-center justify-center p-4" style="touch-action: pan-y;">
+        <div class="bg-zinc-950/95 border border-zinc-800 rounded-3xl w-full max-w-3xl max-h-[88vh] flex flex-col overflow-hidden shadow-2xl">
+            <div class="flex items-center justify-between p-6 border-b border-zinc-800">
+                <div>
+                    <span class="text-[10px] uppercase tracking-widest text-red-400 font-bold">SURVIVAL BRIEFING</span>
+                    <h2 class="font-horror text-2xl font-bold text-white">ENTITY SIGNS & HOW TO SURVIVE</h2>
+                </div>
+                <button onclick="closeGuideAndMaybeStart()" class="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold">I UNDERSTAND</button>
+            </div>
+
+            <div class="p-6 overflow-y-auto space-y-4 text-sm">
+                <div class="p-4 rounded-2xl bg-zinc-900/90 border border-red-900/50 flex gap-4 items-start">
+                    <div class="text-3xl">⚡</div>
+                    <div>
+                        <h3 class="font-bold text-red-400 text-base">1. THE RUSHER — Sign: Lights Flicker & Distant Roar</h3>
+                        <p class="text-zinc-300 text-xs mt-1 leading-relaxed">
+                            When ceiling lamps rapidly flicker and the corridor rumbles, <span class="text-white font-semibold">The Rusher</span> is sprinting down the hall. Immediately press <span class="text-amber-400 font-mono-code">[E]</span> near a wooden <strong>Hiding Closet</strong> before it arrives, or use an Invisibility Potion.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="p-4 rounded-2xl bg-zinc-900/90 border border-purple-900/50 flex gap-4 items-start">
+                    <div class="text-3xl">👁️</div>
+                    <div>
+                        <h3 class="font-bold text-purple-400 text-base">2. THE WATCHER — Sign: High-Pitched Whisper & Purple Static</h3>
+                        <p class="text-zinc-300 text-xs mt-1 leading-relaxed">
+                            When whispers echo and a multi-eyed apparition materializes ahead, <span class="text-white font-semibold">LOOK AWAY IMMEDIATELY</span>. Staring at The Watcher drains your soul and triggers a lethal strike.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="p-4 rounded-2xl bg-zinc-900/90 border border-amber-900/50 flex gap-4 items-start">
+                    <div class="text-3xl">🔦</div>
+                    <div>
+                        <h3 class="font-bold text-amber-400 text-base">3. THE STALKER & DRAWER MIMICS</h3>
+                        <p class="text-zinc-300 text-xs mt-1 leading-relaxed">
+                            Open wooden dressers with <span class="text-amber-400 font-mono-code">[E]</span> to loot Soul Coins, Batteries, or Potions—but beware of rare ambush mimics! If footsteps creep behind you, aim your flashlight and <span class="text-white font-semibold">Hold Right-Click (or BLAST)</span> to burn The Stalker away.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="p-4 rounded-2xl bg-sky-950/40 border border-sky-700/40 flex gap-4 items-start">
+                    <div class="text-3xl">🌌</div>
+                    <div>
+                        <h3 class="font-bold text-sky-300 text-base">4. DOOR 100 & THE ABYSS (-100 TO 0)</h3>
+                        <p class="text-zinc-300 text-xs mt-1 leading-relaxed">
+                            Reaching Door 100 unlocks <span class="text-sky-300 font-semibold">The Abyss</span>, climbing from Depth -100 up to 0. Your Soul Light constantly decays—touch glowing <strong>Cyan Light Orbs</strong> in every chamber or the darkness will consume you.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 6. ADMIN CONSOLE (Legend.AymanGaming2024) ==================== -->
+    <div id="admin-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4" style="touch-action: pan-y;">
+        <div class="bg-zinc-950 border-2 border-purple-500/70 rounded-3xl w-full max-w-2xl overflow-hidden shadow-[0_0_50px_rgba(168,85,247,0.4)]">
+            <div class="flex items-center justify-between p-5 bg-gradient-to-r from-purple-950 to-zinc-950 border-b border-purple-500/40">
+                <div class="flex items-center gap-3">
+                    <span class="text-2xl">👑</span>
+                    <div>
+                        <h2 class="font-horror text-xl font-bold text-white">AYMANGAMING ARCHITECT CONSOLE</h2>
+                        <p class="text-[11px] font-mono-code text-purple-300">CODE VERIFIED: Legend.AymanGaming2024</p>
+                    </div>
+                </div>
+                <button onclick="closeModal('admin-modal')" class="w-9 h-9 rounded-xl bg-purple-900/50 hover:bg-purple-800 text-white font-bold">✕</button>
+            </div>
+
+            <div class="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    <button onclick="toggleAdminFlag('godMode')" id="adm-godMode" class="p-3.5 rounded-2xl border border-zinc-800 bg-zinc-900 text-left transition">
+                        <div class="text-xs font-bold text-white">🛡️ God Mode</div>
+                        <div class="text-[11px] text-zinc-400 mt-0.5">Immune to monsters & Abyss</div>
+                    </button>
+
+                    <button onclick="toggleAdminFlag('flyMode')" id="adm-flyMode" class="p-3.5 rounded-2xl border border-zinc-800 bg-zinc-900 text-left transition">
+                        <div class="text-xs font-bold text-white">🕊️ Fly / Noclip</div>
+                        <div class="text-[11px] text-zinc-400 mt-0.5">Space: Up • C: Down</div>
+                    </button>
+
+                    <button onclick="toggleAdminFlag('infStaminaBattery')" id="adm-infStaminaBattery" class="p-3.5 rounded-2xl border border-zinc-800 bg-zinc-900 text-left transition">
+                        <div class="text-xs font-bold text-white">♾️ Infinite Energy</div>
+                        <div class="text-[11px] text-zinc-400 mt-0.5">Max Stamina, Battery & Light</div>
+                    </button>
+
+                    <button onclick="toggleAdminFlag('superSpeed')" id="adm-superSpeed" class="p-3.5 rounded-2xl border border-zinc-800 bg-zinc-900 text-left transition">
+                        <div class="text-xs font-bold text-white">⚡ Hyper Speed</div>
+                        <div class="text-[11px] text-zinc-400 mt-0.5">3x Movement Velocity</div>
+                    </button>
+
+                    <button onclick="toggleAdminFlag('fullBright')" id="adm-fullBright" class="p-3.5 rounded-2xl border border-zinc-800 bg-zinc-900 text-left transition">
+                        <div class="text-xs font-bold text-white">☀️ Night Vision</div>
+                        <div class="text-[11px] text-zinc-400 mt-0.5">Illuminate entire map</div>
+                    </button>
+
+                    <button onclick="adminBanishEntities()" class="p-3.5 rounded-2xl border border-red-800/60 bg-red-950/30 hover:bg-red-900/50 text-left transition">
+                        <div class="text-xs font-bold text-red-300">💀 Banish Entities</div>
+                        <div class="text-[11px] text-zinc-400 mt-0.5">Despawn active monsters</div>
+                    </button>
+                </div>
+
+                <div class="pt-3 border-t border-zinc-800">
+                    <div class="text-xs uppercase tracking-wider text-zinc-400 font-bold mb-2.5">Infinite Resources & Unlocks</div>
+                    <div class="flex flex-wrap gap-2.5">
+                        <button onclick="adminGiveCoins(10000)" class="px-4 py-2.5 rounded-xl bg-amber-500/20 border border-amber-500/50 text-amber-300 text-xs font-bold hover:bg-amber-500/30">
+                            +10,000 Coins
+                        </button>
+                        <button onclick="adminGivePotions()" class="px-4 py-2.5 rounded-xl bg-emerald-500/20 border border-emerald-500/50 text-emerald-300 text-xs font-bold hover:bg-emerald-500/30">
+                            +50 All Potions
+                        </button>
+                        <button onclick="adminUnlockAll()" class="px-4 py-2.5 rounded-xl bg-purple-500/20 border border-purple-500/50 text-purple-200 text-xs font-bold hover:bg-purple-500/30">
+                            Unlock All Items, Accessories & Abyss
+                        </button>
+                    </div>
+                </div>
+
+                <div class="pt-3 border-t border-zinc-800">
+                    <div class="text-xs uppercase tracking-wider text-zinc-400 font-bold mb-2.5">Room & Dimension Warp</div>
+                    <div class="flex flex-wrap items-center gap-2.5">
+                        <button onclick="adminSkipRoom()" class="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold">
+                            ⏭️ Skip Current Room
+                        </button>
+                        <button onclick="adminWarpDoor(99)" class="px-4 py-2.5 rounded-xl bg-red-900/60 hover:bg-red-800 text-red-100 text-xs font-bold">
+                            🚪 Warp to Door 99
+                        </button>
+                        <button onclick="adminStartAbyss()" class="px-4 py-2.5 rounded-xl bg-sky-900/60 hover:bg-sky-800 text-sky-100 text-xs font-bold">
+                            🌌 Warp to Abyss (-100)
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 7. JUMPSCARE & GAME OVER OVERLAY ==================== -->
+    <div id="gameover-modal" class="hidden fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-6 text-center">
+        <div id="jumpscare-visual" class="mb-6 text-8xl md:text-9xl filter drop-shadow-[0_0_45px_rgba(220,38,38,0.9)]">
+            👹
+        </div>
+        <h2 id="gameover-title" class="font-horror text-4xl md:text-6xl font-extrabold text-red-500 tracking-wider mb-2">
+            YOU WERE CONSUMED
+        </h2>
+        <p id="gameover-reason" class="text-zinc-300 text-sm md:text-base max-w-md mb-6">
+            The Rusher caught you in the open corridor.
+        </p>
+        <div class="flex items-center gap-6 bg-zinc-900/90 border border-zinc-800 px-6 py-3 rounded-2xl mb-8">
+            <div>
+                <div class="text-[10px] uppercase text-zinc-400">Reached</div>
+                <div id="gameover-room" class="font-mono-code font-bold text-white text-lg">Door 004</div>
+            </div>
+            <div class="h-8 w-[1px] bg-zinc-800"></div>
+            <div>
+                <div class="text-[10px] uppercase text-zinc-400">Coins Earned</div>
+                <div id="gameover-coins" class="font-mono-code font-bold text-amber-400 text-lg">+45 🪙</div>
+            </div>
+        </div>
+        <div class="flex flex-wrap gap-4 justify-center">
+            <button onclick="restartSameMode()" class="px-7 py-3.5 rounded-2xl bg-red-600 hover:bg-red-500 text-white font-bold text-sm tracking-wide shadow-lg">
+                TRY AGAIN
+            </button>
+            <button onclick="returnToMenuFromDeath()" class="px-7 py-3.5 rounded-2xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold text-sm tracking-wide">
+                MAIN MENU
+            </button>
+        </div>
+    </div>
+
+    <script>
+    // ==================== 1. SAVE DATA & CATALOGS ====================
+    const STORAGE_KEY = 'the_corridor_horror_save_v4';
+
+    const FLASHLIGHTS = [
+        { id: 'brass', name: 'Standard Brass', price: 0, range: 28, intensity: 2.8, color: 0xffe8c2, drain: 1.0, burnPower: 1.0, desc: 'Reliable warm beam. Hold RMB to stun stalkers.' },
+        { id: 'tactical', name: 'Tactical Halogen', price: 150, range: 38, intensity: 3.6, color: 0xffffff, drain: 0.85, burnPower: 1.6, desc: 'Wide crisp white beam with 60% stronger entity burn.' },
+        { id: 'uv_purifier', name: 'UV Soul Purifier', price: 420, range: 46, intensity: 4.2, color: 0x38bdf8, drain: 0.7, burnPower: 2.5, desc: 'Ultraviolet beam that rapidly banishes entities & slows Abyss drain.' },
+        { id: 'solar_relic', name: 'Solar Relic Lantern', price: 950, range: 56, intensity: 5.0, color: 0xfbbf24, drain: 0.45, burnPower: 4.0, desc: 'Ancient golden radiance. Melts darkness and entities effortlessly.' }
+    ];
+
+    const ACCESSORIES = [
+        { id: 'none', name: 'Bare Wrist', rarity: 'Common', color: 0x71717a, desc: 'No wrist accessory equipped.' },
+        { id: 'chrono_watch', name: 'Obsidian Chrono Watch', rarity: 'Rare', color: 0x38bdf8, desc: 'Sleek tactical timepiece on your left wrist (+10% Speed).' },
+        { id: 'crimson_band', name: 'Crimson Ward Bracelet', rarity: 'Epic', color: 0xef4444, desc: 'Glowing runes on your forearm (+20 Max Vitality).' },
+        { id: 'abyss_gauntlet', name: 'Abyssal Void Cuff', rarity: 'Legendary', color: 0xa855f7, desc: 'Forged from Abyss steel (+25% Coin gain & Soul Light).' },
+        { id: 'golden_cuff', name: 'Sovereign Gold Bangle', rarity: 'Mythic', color: 0xfacc15, desc: 'Radiant royal cuff (+35% Stamina & Coin gain).' }
+    ];
+
+    const defaultSave = {
+        coins: 120,
+        bestRoom: 0,
+        abyssUnlocked: false,
+        firstTimeTutorialSeen: false,
+        adminUnlocked: false,
+        ownedFlashlights: ['brass'],
+        equippedFlashlight: 'brass',
+        ownedAccessories: ['none'],
+        equippedAccessory: 'none',
+        potions: { speed: 1, invis: 1 },
+        upgrades: { speed: 0, stamina: 0, battery: 0, vitality: 0 },
+        settings: { graphics: 'ultra', sensitivity: 1.0, volume: 0.8 },
+        redeemedCodes: []
+    };
+
+    let saveData = loadSave();
+
+    function loadSave() {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (!raw) return JSON.parse(JSON.stringify(defaultSave));
+            const parsed = JSON.parse(raw);
+            return {
+                ...defaultSave,
+                ...parsed,
+                potions: { ...defaultSave.potions, ...(parsed.potions || {}) },
+                upgrades: { ...defaultSave.upgrades, ...(parsed.upgrades || {}) },
+                settings: { ...defaultSave.settings, ...(parsed.settings || {}) }
+            };
+        } catch (e) {
+            return JSON.parse(JSON.stringify(defaultSave));
+        }
+    }
+
+    function persistSave() {
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(saveData));
+        } catch (e) {}
+    }
+
+    // ==================== 2. PROCEDURAL WEB AUDIO ENGINE (WORDLESS VOCAL CHOIR & ORGANIC HORROR SFX) ====================
+    class HorrorAudioEngine {
+        constructor() {
+            this.ctx = null;
+            this.masterGain = null;
+            this.droneOsc = null;
+            this.choirGain = null;
+            this.choirEnabled = true;
+            this.choirStep = 0;
+            this.nextChoirNoteTime = 0;
+            this.noiseBuffer = null;
+            this.nextCreakTime = 0;
+        }
+
+        init() {
+            if (this.ctx) {
+                if (this.ctx.state === 'suspended') this.ctx.resume();
+                return;
+            }
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (!AudioCtx) return;
+            this.ctx = new AudioCtx();
+            this.masterGain = this.ctx.createGain();
+            this.masterGain.gain.value = saveData.settings.volume;
+            this.masterGain.connect(this.ctx.destination);
+
+            // Generate 3-second pink noise buffer for organic wind, footsteps & vocal breath
+            const bufferSize = this.ctx.sampleRate * 3;
+            this.noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+            const data = this.noiseBuffer.getChannelData(0);
+            let b0 = 0, b1 = 0, b2 = 0;
+            for (let i = 0; i < bufferSize; i++) {
+                const white = Math.random() * 2 - 1;
+                b0 = 0.99765 * b0 + white * 0.099046;
+                b1 = 0.96300 * b1 + white * 0.2965164;
+                b2 = 0.57000 * b2 + white * 1.0526913;
+                data[i] = (b0 + b1 + b2 + white * 0.1848) * 0.14;
+            }
+
+            this.startAmbientDrone();
+        }
+
+        setVolume(val) {
+            if (this.masterGain && this.ctx) {
+                this.masterGain.gain.setTargetAtTime(val, this.ctx.currentTime, 0.05);
+            }
+        }
+
+        toggleChoir() {
+            this.init();
+            this.choirEnabled = !this.choirEnabled;
+            if (this.choirGain && this.ctx) {
+                this.choirGain.gain.setTargetAtTime(this.choirEnabled ? 0.24 : 0.0, this.ctx.currentTime, 0.25);
+            }
+            return this.choirEnabled;
+        }
+
+        startAmbientDrone() {
+            if (!this.ctx || this.droneOsc) return;
+            const osc1 = this.ctx.createOscillator();
+            const osc2 = this.ctx.createOscillator();
+            const filter = this.ctx.createBiquadFilter();
+            const gain = this.ctx.createGain();
+
+            osc1.type = 'sawtooth';
+            osc1.frequency.value = 36.7;
+            osc2.type = 'triangle';
+            osc2.frequency.value = 38.2;
+
+            filter.type = 'lowpass';
+            filter.frequency.value = 88;
+            filter.Q.value = 3.5;
+
+            gain.gain.value = 0.18;
+
+            osc1.connect(filter);
+            osc2.connect(filter);
+            filter.connect(gain);
+            gain.connect(this.masterGain);
+
+            // Soft haunted air current
+            const wind = this.ctx.createBufferSource();
+            wind.buffer = this.noiseBuffer;
+            wind.loop = true;
+            const windFilter = this.ctx.createBiquadFilter();
+            windFilter.type = 'bandpass';
+            windFilter.frequency.value = 280;
+            windFilter.Q.value = 7;
+            const windGain = this.ctx.createGain();
+            windGain.gain.value = 0.11;
+            wind.connect(windFilter);
+            windFilter.connect(windGain);
+            windGain.connect(this.masterGain);
+
+            // Dedicated bus for Wordless Vocal Choir Soundtrack
+            this.choirGain = this.ctx.createGain();
+            this.choirGain.gain.value = this.choirEnabled ? 0.24 : 0;
+            this.choirGain.connect(this.masterGain);
+
+            osc1.start();
+            osc2.start();
+            wind.start();
+            this.droneOsc = { osc1, osc2 };
+        }
+
+        // Synthesizes a haunting, wordless human soprano/alto vocal lament ("Ahhh / Ooooh") using dual vowel formants
+        updateWordlessVocalChoir() {
+            if (!this.ctx || !this.choirEnabled || !this.choirGain) return;
+            const now = this.ctx.currentTime;
+            if (now < this.nextChoirNoteTime) return;
+
+            const scaleFreqs = [293.66, 311.13, 349.23, 329.63, 261.63, 293.66, 220.00, 233.08];
+            const vowels = [
+                { f1: 720, f2: 1180 }, // "Ahhhh"
+                { f1: 380, f2: 860 },  // "Ooooh"
+                { f1: 480, f2: 1450 }  // "Eeeeh"
+            ];
+            const baseFreq = scaleFreqs[this.choirStep % scaleFreqs.length];
+            const vowel = vowels[this.choirStep % vowels.length];
+            const dur = 4.2;
+            this.nextChoirNoteTime = now + 3.4;
+            this.choirStep++;
+
+            const v1 = this.ctx.createOscillator();
+            const v2 = this.ctx.createOscillator();
+            const vibrato = this.ctx.createOscillator();
+            const vibratoDepth = this.ctx.createGain();
+
+            v1.type = 'sawtooth';
+            v2.type = 'sawtooth';
+            v1.frequency.setValueAtTime(baseFreq * 0.985, now);
+            v1.frequency.linearRampToValueAtTime(baseFreq, now + 0.45);
+            v2.frequency.setValueAtTime(baseFreq * 1.004, now);
+
+            vibrato.type = 'sine';
+            vibrato.frequency.value = 5.1;
+            vibratoDepth.gain.value = 3.2;
+            vibrato.connect(vibratoDepth);
+            vibratoDepth.connect(v1.frequency);
+            vibratoDepth.connect(v2.frequency);
+
+            const formant1 = this.ctx.createBiquadFilter();
+            formant1.type = 'bandpass';
+            formant1.frequency.value = vowel.f1;
+            formant1.Q.value = 5.5;
+
+            const formant2 = this.ctx.createBiquadFilter();
+            formant2.type = 'bandpass';
+            formant2.frequency.value = vowel.f2;
+            formant2.Q.value = 6.5;
+
+            const formant2Gain = this.ctx.createGain();
+            formant2Gain.gain.value = 0.55;
+
+            const noteEnv = this.ctx.createGain();
+            noteEnv.gain.setValueAtTime(0.0001, now);
+            noteEnv.gain.linearRampToValueAtTime(0.45, now + 1.15);
+            noteEnv.gain.setValueAtTime(0.42, now + dur - 1.3);
+            noteEnv.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+
+            v1.connect(formant1);
+            v2.connect(formant1);
+            v1.connect(formant2);
+            v2.connect(formant2);
+
+            formant1.connect(noteEnv);
+            formant2.connect(formant2Gain);
+            formant2Gain.connect(noteEnv);
+
+            if (this.noiseBuffer) {
+                const breath = this.ctx.createBufferSource();
+                breath.buffer = this.noiseBuffer;
+                const breathFilter = this.ctx.createBiquadFilter();
+                breathFilter.type = 'bandpass';
+                breathFilter.frequency.value = vowel.f2;
+                breathFilter.Q.value = 4;
+                const breathGain = this.ctx.createGain();
+                breathGain.gain.value = 0.08;
+                breath.connect(breathFilter);
+                breathFilter.connect(breathGain);
+                breathGain.connect(noteEnv);
+                breath.start(now, Math.random(), dur);
+            }
+
+            noteEnv.connect(this.choirGain);
+
+            v1.start(now);
+            v2.start(now);
+            vibrato.start(now);
+            v1.stop(now + dur + 0.05);
+            v2.stop(now + dur + 0.05);
+            vibrato.stop(now + dur + 0.05);
+        }
+
+        playRandomCreak() {
+            if (!this.ctx || !this.noiseBuffer) return;
+            const now = this.ctx.currentTime;
+            if (now < this.nextCreakTime) return;
+            this.nextCreakTime = now + 7 + Math.random() * 10;
+
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'triangle';
+            const startF = 72 + Math.random() * 48;
+            osc.frequency.setValueAtTime(startF, now);
+            osc.frequency.exponentialRampToValueAtTime(startF * 0.65, now + 1.3);
+
+            const filter = this.ctx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.value = 240;
+
+            gain.gain.setValueAtTime(0.001, now);
+            gain.gain.linearRampToValueAtTime(0.11, now + 0.35);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 1.4);
+
+            osc.connect(filter);
+            filter.connect(gain);
+            gain.connect(this.masterGain);
+            osc.start(now);
+            osc.stop(now + 1.45);
+        }
+
+        playFootstep(isSprint = false) {
+            if (!this.ctx || !this.noiseBuffer) return;
+            const now = this.ctx.currentTime;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(isSprint ? 92 : 72, now);
+            osc.frequency.exponentialRampToValueAtTime(24, now + 0.085);
+
+            gain.gain.setValueAtTime(isSprint ? 0.18 : 0.11, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.095);
+
+            osc.connect(gain);
+            gain.connect(this.masterGain);
+            osc.start(now);
+            osc.stop(now + 0.1);
+        }
+
+        playClick(pitch = 520) {
+            if (!this.ctx) return;
+            const now = this.ctx.currentTime;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(pitch, now);
+            osc.frequency.exponentialRampToValueAtTime(pitch * 0.5, now + 0.06);
+            gain.gain.setValueAtTime(0.14, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+            osc.connect(gain);
+            gain.connect(this.masterGain);
+            osc.start(now);
+            osc.stop(now + 0.07);
+        }
+
+        playDrawerSlide() {
+            if (!this.ctx || !this.noiseBuffer) return;
+            const now = this.ctx.currentTime;
+            const src = this.ctx.createBufferSource();
+            src.buffer = this.noiseBuffer;
+            const filter = this.ctx.createBiquadFilter();
+            filter.type = 'bandpass';
+            filter.frequency.setValueAtTime(340, now);
+            filter.frequency.linearRampToValueAtTime(520, now + 0.25);
+            filter.Q.value = 4.5;
+            const gain = this.ctx.createGain();
+            gain.gain.setValueAtTime(0.22, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+            src.connect(filter);
+            filter.connect(gain);
+            gain.connect(this.masterGain);
+            src.start(now, 0, 0.3);
+        }
+
+        playDoorCreak() {
+            if (!this.ctx || !this.noiseBuffer) return;
+            const now = this.ctx.currentTime;
+            const osc = this.ctx.createOscillator();
+            const filter = this.ctx.createBiquadFilter();
+            const gain = this.ctx.createGain();
+
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(115, now);
+            osc.frequency.linearRampToValueAtTime(165, now + 0.25);
+            osc.frequency.linearRampToValueAtTime(72, now + 0.65);
+
+            filter.type = 'lowpass';
+            filter.frequency.value = 340;
+
+            gain.gain.setValueAtTime(0.22, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.68);
+
+            osc.connect(filter);
+            filter.connect(gain);
+            gain.connect(this.masterGain);
+            osc.start(now);
+            osc.stop(now + 0.7);
+        }
+
+        playCoinOrOrb(isOrb = false) {
+            if (!this.ctx) return;
+            const now = this.ctx.currentTime;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(isOrb ? 587.33 : 987.77, now);
+            osc.frequency.setValueAtTime(isOrb ? 880 : 1318.5, now + 0.08);
+            gain.gain.setValueAtTime(0.15, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+            osc.connect(gain);
+            gain.connect(this.masterGain);
+            osc.start(now);
+            osc.stop(now + 0.31);
+        }
+
+        playWarningCue(type) {
+            if (!this.ctx) return;
+            const now = this.ctx.currentTime;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+
+            if (type === 'rusher') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(34, now);
+                osc.frequency.exponentialRampToValueAtTime(98, now + 1.55);
+                gain.gain.setValueAtTime(0.06, now);
+                gain.gain.linearRampToValueAtTime(0.42, now + 1.3);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 1.75);
+            } else if (type === 'watcher') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(740, now);
+                osc.frequency.linearRampToValueAtTime(554, now + 1.1);
+                gain.gain.setValueAtTime(0.25, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
+            } else {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(84, now);
+                osc.frequency.exponentialRampToValueAtTime(38, now + 0.9);
+                gain.gain.setValueAtTime(0.28, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.95);
+            }
+
+            osc.connect(gain);
+            gain.connect(this.masterGain);
+            osc.start(now);
+            osc.stop(now + 1.8);
+        }
+
+        playJumpscare() {
+            if (!this.ctx) return;
+            const now = this.ctx.currentTime;
+            [92, 184, 368, 736, 1380].forEach((freq, i) => {
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = i % 2 === 0 ? 'sawtooth' : 'triangle';
+                osc.frequency.setValueAtTime(freq, now);
+                osc.frequency.linearRampToValueAtTime(freq * 1.48, now + 0.14);
+                osc.frequency.exponentialRampToValueAtTime(36, now + 1.25);
+
+                gain.gain.setValueAtTime(0.32, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 1.3);
+
+                osc.connect(gain);
+                gain.connect(this.masterGain);
+                osc.start(now);
+                osc.stop(now + 1.32);
+            });
+
+            if (this.noiseBuffer) {
+                const scream = this.ctx.createBufferSource();
+                scream.buffer = this.noiseBuffer;
+                const bp = this.ctx.createBiquadFilter();
+                bp.type = 'bandpass';
+                bp.frequency.setValueAtTime(1250, now);
+                bp.Q.value = 1.4;
+                const ng = this.ctx.createGain();
+                ng.gain.setValueAtTime(0.55, now);
+                ng.gain.exponentialRampToValueAtTime(0.001, now + 1.25);
+                scream.connect(bp);
+                bp.connect(ng);
+                ng.connect(this.masterGain);
+                scream.start(now, 0, 1.3);
+            }
+        }
+    }
+
+    const sfx = new HorrorAudioEngine();
+
+    function toggleMenuChoir() {
+        const active = sfx.toggleChoir();
+        const btn = document.getElementById('btn-toggle-choir');
+        if (btn) btn.textContent = `🎵 Vocal Ambience: ${active ? 'ON' : 'OFF'}`;
+    }
+
+    // ==================== 2B. SMART DEVICE DETECTION (PHONES, IPADS/TABLETS & PC) ====================
+    let isMobileMode = false;
+    let mobileSprint = false;
+
+    function detectDeviceMode() {
+        const ua = navigator.userAgent || '';
+        const platform = navigator.platform || '';
+        const hasTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+        const isIPadOS = (platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+        const isCoarsePointer = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+        isMobileMode = isMobileUA || isIPadOS || (hasTouch && (isCoarsePointer || window.innerWidth < 1024));
+        applyDeviceModeUI();
+    }
+
+    function toggleDeviceModeOverride() {
+        sfx.init();
+        sfx.playClick(600);
+        isMobileMode = !isMobileMode;
+        applyDeviceModeUI();
+        showToast(`Switched to ${isMobileMode ? '📱 Mobile / Tablet Touch Mode' : '🖥️ Computer (Keyboard & Mouse) Mode'}`, 'info');
+    }
+
+    function applyDeviceModeUI() {
+        const badge = document.getElementById('device-mode-badge');
+        const switchBtn = document.getElementById('btn-switch-device');
+        const mobileCtrl = document.getElementById('mobile-controls');
+
+        if (badge) {
+            badge.textContent = isMobileMode ? '📱 MOBILE / TOUCH MODE' : '🖥️ PC MODE';
+            badge.className = isMobileMode
+                ? 'ml-1 px-2 py-0.5 rounded bg-sky-950/65 border border-sky-400/50 text-sky-200 font-mono-code text-[10px]'
+                : 'ml-1 px-2 py-0.5 rounded bg-black/50 border border-zinc-600/60 text-zinc-200 font-mono-code text-[10px]';
+        }
+        if (switchBtn) {
+            switchBtn.textContent = isMobileMode ? 'Switch to PC Mode' : 'Switch to Mobile Mode';
+        }
+        if (mobileCtrl) {
+            if (isMobileMode) {
+                mobileCtrl.classList.remove('hidden');
+                mobileCtrl.classList.add('flex');
+            } else {
+                mobileCtrl.classList.add('hidden');
+                mobileCtrl.classList.remove('flex');
+            }
+        }
+    }
+
+    // ==================== 3. TOAST & MODAL UTILITIES ====================
+    function showToast(msg, type = 'info') {
+        const container = document.getElementById('toast-container');
+        const el = document.createElement('div');
+        const colors = {
+            info: 'bg-zinc-900/95 border-zinc-700 text-zinc-100',
+            success: 'bg-emerald-950/95 border-emerald-500/60 text-emerald-200',
+            warning: 'bg-amber-950/95 border-amber-500/60 text-amber-200',
+            danger: 'bg-red-950/95 border-red-500/60 text-red-200',
+            admin: 'bg-purple-950/95 border-purple-500/70 text-purple-200'
+        };
+        el.className = `px-4 py-2.5 rounded-xl border text-xs font-semibold shadow-2xl backdrop-blur-md transition-all duration-300 ${colors[type] || colors.info}`;
+        el.textContent = msg;
+        container.appendChild(el);
+        setTimeout(() => {
+            el.style.opacity = '0';
+            el.style.transform = 'translateY(-8px)';
+            setTimeout(() => el.remove(), 300);
+        }, 2800);
+    }
+
+    function openModal(id) {
+        sfx.init();
+        sfx.playClick(620);
+        document.getElementById(id).classList.remove('hidden');
+        if (id === 'shop-modal') renderShop();
+        if (id === 'admin-modal') updateAdminUI();
+    }
+
+    function closeModal(id) {
+        sfx.playClick(420);
+        document.getElementById(id).classList.add('hidden');
+    }
+
+    // ==================== 4. GAME & ADMIN STATE ====================
+    const adminState = {
+        godMode: false,
+        flyMode: false,
+        infStaminaBattery: false,
+        superSpeed: false,
+        fullBright: false
+    };
+
+    const state = {
+        isPlaying: false,
+        mode: 'corridor',
+        difficulty: 'normal',
+        roomNumber: 1,
+        sessionCoins: 0,
+        hp: 100,
+        maxHp: 100,
+        stamina: 100,
+        maxStamina: 100,
+        battery: 100,
+        flashlightOn: true,
+        combatBeam: false,
+        abyssLight: 100,
+        isHiding: false,
+        activeCloset: null,
+        preHidePos: new THREE.Vector3(),
+        buffs: { speed: 0, invis: 0 },
+        quest: {
+            type: 'none',
+            completed: true,
+            collected: 0,
+            required: 0,
+            hasKey: false
+        },
+        activeEntities: [],
+        interactables: [],
+        pickups: [],
+        roomLights: [],
+        animatedClosets: [],
+        animatedDrawers: [],
+        activeRooms: [],
+        currentRoomObj: null,
+        stepTimer: 0
+    };
+
+    // ==================== 5. MENU, SHOP, SETTINGS & ADMIN LOGIC ====================
+    function refreshMenuUI() {
+        document.getElementById('menu-coins').textContent = saveData.coins.toLocaleString();
+        document.getElementById('menu-best-room').textContent = `Door ${saveData.bestRoom}`;
+
+        const fl = FLASHLIGHTS.find(f => f.id === saveData.equippedFlashlight) || FLASHLIGHTS[0];
+        const acc = ACCESSORIES.find(a => a.id === saveData.equippedAccessory) || ACCESSORIES[0];
+        document.getElementById('hud-menu-flashlight').textContent = fl.name;
+        document.getElementById('hud-menu-accessory').textContent = acc.name;
+        document.getElementById('hud-menu-potions').textContent = `${saveData.potions.speed} Speed | ${saveData.potions.invis} Invisibility`;
+
+        const abyssBtn = document.getElementById('btn-start-abyss');
+        const abyssBadge = document.getElementById('abyss-unlock-badge');
+        if (saveData.abyssUnlocked) {
+            abyssBtn.classList.remove('opacity-75');
+            abyssBadge.textContent = '🌌 THE ABYSS UNLOCKED';
+            abyssBadge.className = 'px-3 py-1 rounded-full text-xs font-bold bg-sky-950/65 border border-sky-400/60 text-sky-200';
+        }
+
+        if (saveData.adminUnlocked) {
+            document.getElementById('menu-admin-btn').classList.remove('hidden');
+            document.getElementById('hud-admin-btn').classList.remove('hidden');
+        }
+    }
+
+    function selectDifficulty(diff) {
+        sfx.init();
+        sfx.playClick(580);
+        state.difficulty = diff;
+        document.querySelectorAll('.diff-card').forEach(el => {
+            el.className = 'glass-btn diff-card text-left p-4 rounded-2xl border';
+        });
+        const active = document.getElementById(`diff-${diff}`);
+        active.className = 'glass-btn diff-card text-left p-4 rounded-2xl border-2 border-red-400';
+    }
+
+    function openPlayPanel() {
+        sfx.init();
+        sfx.playClick(660);
+        startGame('corridor');
+    }
+
+    let pendingStartMode = null;
+
+    function startGame(mode) {
+        sfx.init();
+        if (mode === 'abyss' && !saveData.abyssUnlocked) {
+            showToast('Beat Door 100 first to unlock The Abyss (-100 to 0)!', 'warning');
+            return;
+        }
+        state.mode = mode;
+        if (!saveData.firstTimeTutorialSeen) {
+            pendingStartMode = mode;
+            openModal('guide-modal');
+            return;
+        }
+        launchExpedition();
+    }
+
+    function closeGuideAndMaybeStart() {
+        saveData.firstTimeTutorialSeen = true;
+        persistSave();
+        closeModal('guide-modal');
+        if (pendingStartMode) {
+            const m = pendingStartMode;
+            pendingStartMode = null;
+            state.mode = m;
+            launchExpedition();
+        }
+    }
+
+    let currentShopTab = 'flashlights';
+
+    function switchShopTab(tab) {
+        sfx.playClick(540);
+        currentShopTab = tab;
+        document.querySelectorAll('.shop-tab').forEach(btn => {
+            btn.className = 'shop-tab px-4 py-2 rounded-xl bg-zinc-900 text-zinc-400 hover:text-white text-xs font-bold';
+        });
+        document.getElementById(`tab-${tab}`).className = 'shop-tab px-4 py-2 rounded-xl bg-red-600 text-white text-xs font-bold';
+        renderShop();
+    }
+
+    function renderShop() {
+        document.getElementById('shop-coins').textContent = saveData.coins.toLocaleString();
+        const container = document.getElementById('shop-content');
+        container.innerHTML = '';
+
+        if (currentShopTab === 'flashlights') {
+            FLASHLIGHTS.forEach(item => {
+                const owned = saveData.ownedFlashlights.includes(item.id);
+                const equipped = saveData.equippedFlashlight === item.id;
+                const card = document.createElement('div');
+                card.className = 'p-4 rounded-2xl bg-zinc-900/90 border border-zinc-800 flex flex-col justify-between gap-3';
+                card.innerHTML = `
+                    <div>
+                        <div class="flex items-center justify-between">
+                            <h3 class="font-bold text-white">${item.name}</h3>
+                            <span class="text-xs font-mono-code text-amber-400">${owned ? 'OWNED' : item.price + ' 🪙'}</span>
+                        </div>
+                        <p class="text-xs text-zinc-400 mt-1">${item.desc}</p>
+                    </div>
+                    <button onclick="buyOrEquipFlashlight('${item.id}')" class="w-full py-2.5 rounded-xl text-xs font-bold transition ${
+                        equipped ? 'bg-emerald-900/60 border border-emerald-500/50 text-emerald-200' :
+                        owned ? 'bg-zinc-800 hover:bg-zinc-700 text-white' :
+                        'bg-amber-600 hover:bg-amber-500 text-white'
+                    }">
+                        ${equipped ? '✓ EQUIPPED' : owned ? 'EQUIP' : `BUY (${item.price} 🪙)`}
+                    </button>
+                `;
+                container.appendChild(card);
+            });
+        } else if (currentShopTab === 'potions') {
+            const potionsList = [
+                { key: 'speed', name: 'Adrenaline Speed Potion', price: 65, icon: '🧪', desc: 'Boosts movement speed by +65% for 15 seconds. Press [1] in-game.' },
+                { key: 'invis', name: 'Spectral Invisibility Draught', price: 95, icon: '👻', desc: 'Turns your body translucent—entities cannot detect you for 12s. Press [2] in-game.' }
+            ];
+            potionsList.forEach(p => {
+                const card = document.createElement('div');
+                card.className = 'p-4 rounded-2xl bg-zinc-900/90 border border-zinc-800 flex flex-col justify-between gap-3';
+                card.innerHTML = `
+                    <div>
+                        <div class="flex items-center justify-between">
+                            <h3 class="font-bold text-white">${p.icon} ${p.name}</h3>
+                            <span class="text-xs font-mono-code text-emerald-400">Owned: ${saveData.potions[p.key]}</span>
+                        </div>
+                        <p class="text-xs text-zinc-400 mt-1">${p.desc}</p>
+                    </div>
+                    <button onclick="buyPotion('${p.key}', ${p.price})" class="w-full py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition">
+                        BREW POTION (${p.price} 🪙)
+                    </button>
+                `;
+                container.appendChild(card);
+            });
+        } else if (currentShopTab === 'crates') {
+            const crateCard = document.createElement('div');
+            crateCard.className = 'md:col-span-2 p-5 rounded-2xl bg-gradient-to-r from-zinc-900 via-purple-950/30 to-zinc-900 border border-purple-500/40 flex flex-col sm:flex-row items-center justify-between gap-4';
+            crateCard.innerHTML = `
+                <div>
+                    <div class="text-xs uppercase tracking-widest text-purple-400 font-bold">CHARACTER WRISTWEAR</div>
+                    <h3 class="font-horror text-xl font-bold text-white mt-0.5">🎁 Reliquary Accessory Crate</h3>
+                    <p class="text-xs text-zinc-300 mt-1">Unlocks a realistic 3D wrist accessory visible on your arm in-game with passive stat bonuses!</p>
+                </div>
+                <button onclick="openAccessoryCrate()" class="px-6 py-3.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs tracking-wider whitespace-nowrap shadow-lg">
+                    OPEN CRATE (140 🪙)
+                </button>
+            `;
+            container.appendChild(crateCard);
+
+            ACCESSORIES.filter(a => a.id !== 'none').forEach(acc => {
+                const owned = saveData.ownedAccessories.includes(acc.id);
+                const equipped = saveData.equippedAccessory === acc.id;
+                const itemCard = document.createElement('div');
+                itemCard.className = 'p-4 rounded-2xl bg-zinc-900/90 border border-zinc-800 flex flex-col justify-between gap-2';
+                itemCard.innerHTML = `
+                    <div>
+                        <div class="flex items-center justify-between">
+                            <span class="font-bold text-white">${acc.name}</span>
+                            <span class="text-[10px] px-2 py-0.5 rounded bg-zinc-800 text-purple-300 font-bold">${acc.rarity}</span>
+                        </div>
+                        <p class="text-xs text-zinc-400 mt-1">${acc.desc}</p>
+                    </div>
+                    <button onclick="equipAccessory('${acc.id}')" ${!owned ? 'disabled' : ''} class="w-full py-2 rounded-xl text-xs font-bold ${
+                        equipped ? 'bg-emerald-900/60 border border-emerald-500/50 text-emerald-200' :
+                        owned ? 'bg-zinc-800 hover:bg-zinc-700 text-white' :
+                        'bg-zinc-950 text-zinc-600 cursor-not-allowed'
+                    }">
+                        ${equipped ? '✓ EQUIPPED ON WRIST' : owned ? 'EQUIP ACCESSORY' : 'LOCKED IN CRATE'}
+                    </button>
+                `;
+                container.appendChild(itemCard);
+            });
+        } else if (currentShopTab === 'upgrades') {
+            const upgs = [
+                { key: 'vitality', name: 'Reinforced Physique', desc: '+15 Max Vitality per level.' },
+                { key: 'stamina', name: 'Marathon Lungs', desc: '+20% Stamina capacity & regen per level.' },
+                { key: 'battery', name: 'Lithium Capacitor', desc: '-15% Flashlight battery drain per level.' },
+                { key: 'speed', name: 'Lightweight Boots', desc: '+8% Base movement speed per level.' }
+            ];
+            upgs.forEach(u => {
+                const lvl = saveData.upgrades[u.key] || 0;
+                const cost = (lvl + 1) * 110;
+                const card = document.createElement('div');
+                card.className = 'p-4 rounded-2xl bg-zinc-900/90 border border-zinc-800 flex flex-col justify-between gap-3';
+                card.innerHTML = `
+                    <div>
+                        <div class="flex items-center justify-between">
+                            <h3 class="font-bold text-white">${u.name}</h3>
+                            <span class="text-xs font-mono-code text-sky-400">LVL ${lvl} / 5</span>
+                        </div>
+                        <p class="text-xs text-zinc-400 mt-1">${u.desc}</p>
+                    </div>
+                    <button onclick="buyUpgrade('${u.key}', ${cost})" ${lvl >= 5 ? 'disabled' : ''} class="w-full py-2.5 rounded-xl text-xs font-bold ${
+                        lvl >= 5 ? 'bg-zinc-800 text-zinc-500' : 'bg-sky-600 hover:bg-sky-500 text-white'
+                    }">
+                        ${lvl >= 5 ? 'MAX LEVEL' : `UPGRADE (${cost} 🪙)`}
+                    </button>
+                `;
+                container.appendChild(card);
+            });
+        }
+    }
+
+    function buyOrEquipFlashlight(id) {
+        const item = FLASHLIGHTS.find(f => f.id === id);
+        if (!item) return;
+        if (saveData.ownedFlashlights.includes(id)) {
+            saveData.equippedFlashlight = id;
+            sfx.playClick(650);
+            showToast(`Equipped ${item.name}`, 'success');
+        } else {
+            if (saveData.coins < item.price) {
+                showToast('Not enough Soul Coins!', 'danger');
+                return;
+            }
+            saveData.coins -= item.price;
+            saveData.ownedFlashlights.push(id);
+            saveData.equippedFlashlight = id;
+            sfx.playCoinOrOrb(false);
+            showToast(`Purchased & Equipped ${item.name}!`, 'success');
+        }
+        persistSave();
+        refreshMenuUI();
+        renderShop();
+        updatePlayerEquipmentVisuals();
+    }
+
+    function buyPotion(key, price) {
+        if (saveData.coins < price) {
+            showToast('Not enough Soul Coins!', 'danger');
+            return;
+        }
+        saveData.coins -= price;
+        saveData.potions[key] = (saveData.potions[key] || 0) + 1;
+        sfx.playCoinOrOrb(false);
+        persistSave();
+        refreshMenuUI();
+        renderShop();
+        showToast('Brewed potion and added to inventory!', 'success');
+    }
+
+    function openAccessoryCrate() {
+        const cost = 140;
+        if (saveData.coins < cost) {
+            showToast('Need 140 Coins to open a Reliquary Crate!', 'danger');
+            return;
+        }
+        const locked = ACCESSORIES.filter(a => a.id !== 'none' && !saveData.ownedAccessories.includes(a.id));
+        if (locked.length === 0) {
+            showToast('You already own every wrist accessory!', 'info');
+            return;
+        }
+        saveData.coins -= cost;
+        const won = locked[Math.floor(Math.random() * locked.length)];
+        saveData.ownedAccessories.push(won.id);
+        saveData.equippedAccessory = won.id;
+        sfx.playCoinOrOrb(true);
+        persistSave();
+        refreshMenuUI();
+        renderShop();
+        updatePlayerEquipmentVisuals();
+        showToast(`🎁 UNLOCKED: ${won.name} (${won.rarity})!`, 'admin');
+    }
+
+    function equipAccessory(id) {
+        if (!saveData.ownedAccessories.includes(id)) return;
+        saveData.equippedAccessory = id;
+        sfx.playClick(650);
+        persistSave();
+        refreshMenuUI();
+        renderShop();
+        updatePlayerEquipmentVisuals();
+        showToast('Accessory equipped on your left wrist!', 'success');
+    }
+
+    function buyUpgrade(key, cost) {
+        if ((saveData.upgrades[key] || 0) >= 5) return;
+        if (saveData.coins < cost) {
+            showToast('Not enough Soul Coins!', 'danger');
+            return;
+        }
+        saveData.coins -= cost;
+        saveData.upgrades[key]++;
+        sfx.playCoinOrOrb(true);
+        persistSave();
+        refreshMenuUI();
+        renderShop();
+        showToast('Body attribute upgraded!', 'success');
+    }
+
+    function setGraphics(preset) {
+        saveData.settings.graphics = preset;
+        persistSave();
+        document.querySelectorAll('.gfx-btn').forEach(b => {
+            b.className = 'gfx-btn py-2.5 rounded-xl border border-zinc-800 bg-zinc-900 text-xs font-semibold text-zinc-300';
+        });
+        document.getElementById(`gfx-${preset}`).className = 'gfx-btn py-2.5 rounded-xl border-2 border-red-500 bg-red-950/30 text-xs font-bold text-white';
+
+        if (preset === 'low') {
+            renderer.setPixelRatio(1);
+            renderer.shadowMap.enabled = false;
+        } else if (preset === 'medium') {
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+            renderer.shadowMap.enabled = true;
+        } else {
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+        }
+        showToast(`Graphics preset set to ${preset.toUpperCase()}`, 'info');
+    }
+
+    function setSensitivity(val) {
+        saveData.settings.sensitivity = parseFloat(val);
+        document.getElementById('sens-val').textContent = `${parseFloat(val).toFixed(1)}x`;
+        persistSave();
+    }
+
+    function setVolume(val) {
+        saveData.settings.volume = parseFloat(val);
+        document.getElementById('vol-val').textContent = `${Math.round(val * 100)}%`;
+        sfx.setVolume(parseFloat(val));
+        persistSave();
+    }
+
+    function redeemCode() {
+        const input = document.getElementById('code-input');
+        const code = input.value.trim();
+        if (!code) return;
+
+        if (code === 'Legend.AymanGaming2024') {
+            saveData.adminUnlocked = true;
+            persistSave();
+            refreshMenuUI();
+            input.value = '';
+            sfx.playCoinOrOrb(true);
+            closeModal('settings-modal');
+            openModal('admin-modal');
+            showToast('👑 Legend.AymanGaming2024 Verified! Admin Panel Unlocked!', 'admin');
+            return;
+        }
+
+        const upper = code.toUpperCase();
+        if (saveData.redeemedCodes.includes(upper)) {
+            showToast('Code already redeemed!', 'warning');
+            return;
+        }
+
+        if (upper === 'SHADOW100') {
+            saveData.coins += 250;
+            saveData.potions.speed += 2;
+            saveData.redeemedCodes.push(upper);
+            persistSave();
+            refreshMenuUI();
+            input.value = '';
+            sfx.playCoinOrOrb(true);
+            showToast('Redeemed SHADOW100: +250 Coins & 2 Speed Potions!', 'success');
+        } else if (upper === 'ABYSSWALKER') {
+            saveData.abyssUnlocked = true;
+            saveData.coins += 500;
+            saveData.redeemedCodes.push(upper);
+            persistSave();
+            refreshMenuUI();
+            input.value = '';
+            sfx.playCoinOrOrb(true);
+            showToast('Redeemed ABYSSWALKER: The Abyss Unlocked + 500 Coins!', 'success');
+        } else {
+            showToast('Invalid code.', 'danger');
+        }
+    }
+
+    // Admin Console Actions
+    function toggleAdminFlag(flag) {
+        adminState[flag] = !adminState[flag];
+        sfx.playClick(720);
+        updateAdminUI();
+        if (flag === 'fullBright') {
+            ambientLight.intensity = adminState.fullBright ? 2.4 : 0.36;
+        }
+        showToast(`${flag}: ${adminState[flag] ? 'ENABLED' : 'DISABLED'}`, 'admin');
+    }
+
+    function updateAdminUI() {
+        Object.keys(adminState).forEach(key => {
+            const btn = document.getElementById(`adm-${key}`);
+            if (!btn) return;
+            if (adminState[key]) {
+                btn.className = 'p-3.5 rounded-2xl border-2 border-purple-400 bg-purple-900/40 text-left transition shadow-lg';
+            } else {
+                btn.className = 'p-3.5 rounded-2xl border border-zinc-800 bg-zinc-900 text-left transition';
+            }
+        });
+    }
+
+    function adminGiveCoins(amt) {
+        saveData.coins += amt;
+        persistSave();
+        refreshMenuUI();
+        updateHUD();
+        sfx.playCoinOrOrb(true);
+        showToast(`Granted +${amt.toLocaleString()} Soul Coins!`, 'admin');
+    }
+
+    function adminGivePotions() {
+        saveData.potions.speed += 50;
+        saveData.potions.invis += 50;
+        persistSave();
+        refreshMenuUI();
+        updateHUD();
+        sfx.playCoinOrOrb(true);
+        showToast('Granted +50 Speed & +50 Invisibility Potions!', 'admin');
+    }
+
+    function adminUnlockAll() {
+        saveData.ownedFlashlights = FLASHLIGHTS.map(f => f.id);
+        saveData.ownedAccessories = ACCESSORIES.map(a => a.id);
+        saveData.abyssUnlocked = true;
+        saveData.upgrades = { speed: 5, stamina: 5, battery: 5, vitality: 5 };
+        persistSave();
+        refreshMenuUI();
+        sfx.playCoinOrOrb(true);
+        showToast('Unlocked ALL Flashlights, Accessories, Max Upgrades & The Abyss!', 'admin');
+    }
+
+    function adminBanishEntities() {
+        state.activeEntities.forEach(ent => worldGroup.remove(ent.mesh));
+        state.activeEntities = [];
+        document.getElementById('entity-sign-banner').classList.add('hidden');
+        showToast('All active entities banished!', 'admin');
+    }
+
+    function adminSkipRoom() {
+        if (!state.isPlaying) {
+            showToast('Enter the game first to skip rooms!', 'warning');
+            return;
+        }
+        closeModal('admin-modal');
+        if (state.currentRoomObj) {
+            state.currentRoomObj.doorOpen = true;
+            state.quest.completed = true;
+            const exit = state.currentRoomObj.exitWorldPos;
+            const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), state.currentRoomObj.exitWorldYaw);
+            playerPos.set(exit.x + forward.x * 1.2, 1.68, exit.z + forward.z * 1.2);
+            playerRot.yaw = state.currentRoomObj.exitWorldYaw;
+            promoteToNextRoom();
+        }
+    }
+
+    function adminWarpDoor(doorNum) {
+        closeModal('admin-modal');
+        state.mode = 'corridor';
+        if (!state.isPlaying) launchExpedition();
+        state.roomNumber = doorNum;
+        buildSeamlessChainFrom(doorNum);
+        showToast(`Warped to Door ${doorNum}!`, 'admin');
+    }
+
+    function adminStartAbyss() {
+        saveData.abyssUnlocked = true;
+        persistSave();
+        closeModal('admin-modal');
+        state.mode = 'abyss';
+        launchExpedition();
+        showToast('Descended into The Abyss (-100)!', 'admin');
+    }
+
+    // ==================== 6. THREE.JS 3D SCENE, NON-REPEATING ORGANIC TEXTURES & GRAND LOBBY ====================
+    const canvas = document.getElementById('game-canvas');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.18;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x060609);
+    scene.fog = new THREE.FogExp2(0x07070c, 0.022);
+
+    const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.08, 120);
+    camera.rotation.order = 'YXZ';
+
+    function createProceduralTexture(type, isBump = false) {
+        const c = document.createElement('canvas');
+        c.width = 512;
+        c.height = 512;
+        const ctx = c.getContext('2d');
+
+        if (type === 'carpet') {
+            ctx.fillStyle = isBump ? '#808080' : '#2e0b13';
+            ctx.fillRect(0, 0, 512, 512);
+            for (let i = 0; i < 18000; i++) {
+                if (isBump) {
+                    const v = 95 + Math.floor(Math.random() * 65);
+                    ctx.fillStyle = `rgb(${v},${v},${v})`;
+                } else {
+                    ctx.fillStyle = Math.random() > 0.5 ? 'rgba(12,4,6,0.28)' : 'rgba(148,34,48,0.18)';
+                }
+                ctx.fillRect(Math.random() * 512, Math.random() * 512, 2 + Math.random() * 2, 2);
+            }
+            for (let s = 0; s < 18; s++) {
+                const gx = Math.random() * 512;
+                const gy = Math.random() * 512;
+                const grad = ctx.createRadialGradient(gx, gy, 5, gx, gy, 65);
+                grad.addColorStop(0, isBump ? 'rgba(90,90,90,0.2)' : 'rgba(0,0,0,0.22)');
+                grad.addColorStop(1, 'transparent');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, 512, 512);
+            }
+        } else if (type === 'wall') {
+            ctx.fillStyle = isBump ? '#787878' : '#1d1d24';
+            ctx.fillRect(0, 0, 512, 512);
+            for (let i = 0; i < 11000; i++) {
+                const v = isBump ? (90 + Math.floor(Math.random() * 75)) : (22 + Math.floor(Math.random() * 22));
+                ctx.fillStyle = `rgba(${v},${v},${v + 4},0.28)`;
+                ctx.fillRect(Math.random() * 512, Math.random() * 512, 3 + Math.random() * 4, 2);
+            }
+            for (let p = 0; p < 24; p++) {
+                const px = Math.random() * 512;
+                const py = Math.random() * 512;
+                const r = 30 + Math.random() * 80;
+                const grad = ctx.createRadialGradient(px, py, 4, px, py, r);
+                grad.addColorStop(0, isBump ? 'rgba(60,60,60,0.25)' : 'rgba(10,10,14,0.32)');
+                grad.addColorStop(1, 'transparent');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, 512, 512);
+            }
+        } else if (type === 'wood') {
+            ctx.fillStyle = isBump ? '#808080' : '#3a1f10';
+            ctx.fillRect(0, 0, 512, 512);
+            ctx.strokeStyle = isBump ? '#454545' : '#1c0c05';
+            ctx.lineWidth = 2.5;
+            for (let y = 0; y < 512; y += 8) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.bezierCurveTo(160, y + (Math.random() * 10 - 5), 350, y + (Math.random() * 10 - 5), 512, y);
+                ctx.stroke();
+            }
+        } else if (type === 'abyss') {
+            ctx.fillStyle = isBump ? '#707070' : '#050b1c';
+            ctx.fillRect(0, 0, 512, 512);
+            ctx.strokeStyle = isBump ? '#c8c8c8' : 'rgba(14, 165, 233, 0.22)';
+            ctx.lineWidth = 2;
+            for (let i = 0; i < 36; i++) {
+                ctx.beginPath();
+                ctx.arc(Math.random() * 512, Math.random() * 512, 12 + Math.random() * 75, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+        }
+
+        const tex = new THREE.CanvasTexture(c);
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        tex.anisotropy = 4;
+        return tex;
+    }
+
+    function createDoorNumberPlaque(numberText, isAbyss = false) {
+        const c = document.createElement('canvas');
+        c.width = 256;
+        c.height = 128;
+        const ctx = c.getContext('2d');
+
+        const grad = ctx.createLinearGradient(0, 0, 256, 128);
+        if (isAbyss) {
+            grad.addColorStop(0, '#0c4a6e');
+            grad.addColorStop(0.5, '#0369a1');
+            grad.addColorStop(1, '#082f49');
+        } else {
+            grad.addColorStop(0, '#78350f');
+            grad.addColorStop(0.5, '#d97706');
+            grad.addColorStop(1, '#78350f');
+        }
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 256, 128);
+
+        ctx.strokeStyle = isAbyss ? '#7dd3fc' : '#fef3c7';
+        ctx.lineWidth = 8;
+        ctx.strokeRect(10, 10, 236, 108);
+
+        ctx.fillStyle = '#09090b';
+        ctx.font = 'bold 54px "Cinzel", Georgia, serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(numberText, 128, 68);
+
+        const tex = new THREE.CanvasTexture(c);
+        const plaque = new THREE.Mesh(
+            new THREE.BoxGeometry(0.68, 0.32, 0.045),
+            new THREE.MeshStandardMaterial({ map: tex, metalness: 0.78, roughness: 0.25 })
+        );
+        return plaque;
+    }
+
+    const texCarpet = createProceduralTexture('carpet', false);
+    const bumpCarpet = createProceduralTexture('carpet', true);
+    texCarpet.repeat.set(3, 6);
+    bumpCarpet.repeat.set(3, 6);
+
+    const texWall = createProceduralTexture('wall', false);
+    const bumpWall = createProceduralTexture('wall', true);
+    texWall.repeat.set(4, 2);
+    bumpWall.repeat.set(4, 2);
+
+    const texWood = createProceduralTexture('wood', false);
+    const bumpWood = createProceduralTexture('wood', true);
+
+    const texAbyss = createProceduralTexture('abyss', false);
+    const bumpAbyss = createProceduralTexture('abyss', true);
+    texAbyss.repeat.set(4, 6);
+    bumpAbyss.repeat.set(4, 6);
+
+    const ambientLight = new THREE.AmbientLight(0x282834, 0.36);
+    scene.add(ambientLight);
+
+    const flashSpot = new THREE.SpotLight(0xffe8c2, 2.8, 32, Math.PI / 5.5, 0.45, 1.15);
+    flashSpot.castShadow = true;
+    flashSpot.shadow.mapSize.width = 1024;
+    flashSpot.shadow.mapSize.height = 1024;
+    scene.add(flashSpot);
+    scene.add(flashSpot.target);
+
+    // ==================== 7. ANATOMICALLY REALISTIC 3D HUMAN BODY RIG ====================
+    const playerRig = new THREE.Group();
+    scene.add(playerRig);
+
+    const bodyParts = {
+        torso: null,
+        leftArm: null,
+        rightArm: null,
+        leftLeg: null,
+        rightLeg: null,
+        accessoryMesh: null,
+        flashlightMesh: null
+    };
+
+    function createAnatomicalPlayerBody() {
+        const skinMat = new THREE.MeshStandardMaterial({ color: 0xc99678, roughness: 0.58, metalness: 0.04 });
+        const jacketMat = new THREE.MeshStandardMaterial({ color: 0x1e242b, roughness: 0.78, metalness: 0.08 });
+        const shirtMat = new THREE.MeshStandardMaterial({ color: 0x333a45, roughness: 0.85 });
+        const pantsMat = new THREE.MeshStandardMaterial({ color: 0x16181d, roughness: 0.82 });
+        const bootMat = new THREE.MeshStandardMaterial({ color: 0x0d0d10, roughness: 0.45, metalness: 0.15 });
+
+        const torsoGroup = new THREE.Group();
+        torsoGroup.position.set(0, 1.12, 0.04);
+
+        const chest = new THREE.Mesh(new THREE.CylinderGeometry(0.175, 0.145, 0.36, 18), jacketMat);
+        chest.scale.set(1.18, 1, 0.72);
+        chest.position.y = 0.12;
+        chest.castShadow = true;
+        torsoGroup.add(chest);
+
+        const innerShirt = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.11, 0.34, 14), shirtMat);
+        innerShirt.scale.set(1.0, 1, 0.76);
+        innerShirt.position.set(0, 0.12, -0.02);
+        torsoGroup.add(innerShirt);
+
+        const abdomen = new THREE.Mesh(new THREE.CylinderGeometry(0.142, 0.15, 0.24, 16), jacketMat);
+        abdomen.scale.set(1.12, 1, 0.72);
+        abdomen.position.y = -0.15;
+        torsoGroup.add(abdomen);
+
+        bodyParts.torso = torsoGroup;
+        playerRig.add(torsoGroup);
+
+        function buildHumanArm(isRight) {
+            const side = isRight ? 1 : -1;
+            const shoulderPivot = new THREE.Group();
+            shoulderPivot.position.set(side * 0.22, 1.38, 0.02);
+
+            const deltoid = new THREE.Mesh(new THREE.SphereGeometry(0.062, 14, 14), jacketMat);
+            shoulderPivot.add(deltoid);
+
+            const upperArm = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.046, 0.28, 14), jacketMat);
+            upperArm.position.set(0, -0.14, 0);
+            shoulderPivot.add(upperArm);
+
+            const elbowPivot = new THREE.Group();
+            elbowPivot.position.set(0, -0.28, 0);
+            shoulderPivot.add(elbowPivot);
+
+            const elbowJoint = new THREE.Mesh(new THREE.SphereGeometry(0.046, 12, 12), skinMat);
+            elbowPivot.add(elbowJoint);
+
+            const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.046, 0.034, 0.26, 14), skinMat);
+            forearm.position.set(0, -0.13, 0);
+            elbowPivot.add(forearm);
+
+            const wristPivot = new THREE.Group();
+            wristPivot.position.set(0, -0.26, 0);
+            elbowPivot.add(wristPivot);
+
+            const palm = new THREE.Mesh(new THREE.BoxGeometry(0.068, 0.082, 0.028), skinMat);
+            palm.position.set(0, -0.04, 0);
+            wristPivot.add(palm);
+
+            for (let f = 0; f < 4; f++) {
+                const finger = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.006, 0.055, 8), skinMat);
+                finger.position.set(-0.024 + f * 0.016, -0.095, 0.008);
+                finger.rotation.x = 0.45;
+                wristPivot.add(finger);
+            }
+            const thumb = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.007, 0.045, 8), skinMat);
+            thumb.position.set(-side * 0.038, -0.045, 0.015);
+            thumb.rotation.z = side * 0.6;
+            wristPivot.add(thumb);
+
+            return { shoulderPivot, elbowPivot, wristPivot };
+        }
+
+        bodyParts.leftArm = buildHumanArm(false);
+        bodyParts.rightArm = buildHumanArm(true);
+
+        bodyParts.leftArm.shoulderPivot.rotation.set(-0.22, 0.08, -0.14);
+        bodyParts.leftArm.elbowPivot.rotation.set(-0.42, 0.25, 0);
+
+        bodyParts.rightArm.shoulderPivot.rotation.set(-0.38, -0.12, 0.14);
+        bodyParts.rightArm.elbowPivot.rotation.set(-0.95, -0.15, 0);
+
+        playerRig.add(bodyParts.leftArm.shoulderPivot);
+        playerRig.add(bodyParts.rightArm.shoulderPivot);
+
+        function buildHumanLeg(isRight) {
+            const side = isRight ? 1 : -1;
+            const hipPivot = new THREE.Group();
+            hipPivot.position.set(side * 0.105, 0.88, 0.02);
+
+            const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.082, 0.064, 0.42, 16), pantsMat);
+            thigh.position.y = -0.21;
+            thigh.castShadow = true;
+            hipPivot.add(thigh);
+
+            const kneePivot = new THREE.Group();
+            kneePivot.position.set(0, -0.42, 0);
+            hipPivot.add(kneePivot);
+
+            const knee = new THREE.Mesh(new THREE.SphereGeometry(0.062, 12, 12), pantsMat);
+            kneePivot.add(knee);
+
+            const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.046, 0.42, 16), pantsMat);
+            shin.position.y = -0.21;
+            shin.castShadow = true;
+            kneePivot.add(shin);
+
+            const boot = new THREE.Mesh(new THREE.BoxGeometry(0.095, 0.075, 0.22), bootMat);
+            boot.position.set(0, -0.43, -0.045);
+            boot.castShadow = true;
+            kneePivot.add(boot);
+
+            return { hipPivot, kneePivot };
+        }
+
+        bodyParts.leftLeg = buildHumanLeg(false);
+        bodyParts.rightLeg = buildHumanLeg(true);
+        playerRig.add(bodyParts.leftLeg.hipPivot);
+        playerRig.add(bodyParts.rightLeg.hipPivot);
+
+        updatePlayerEquipmentVisuals();
+    }
+
+    function updatePlayerEquipmentVisuals() {
+        if (!bodyParts.leftArm || !bodyParts.rightArm) return;
+
+        if (bodyParts.accessoryMesh) {
+            bodyParts.leftArm.wristPivot.remove(bodyParts.accessoryMesh);
+            bodyParts.accessoryMesh = null;
+        }
+        const acc = ACCESSORIES.find(a => a.id === saveData.equippedAccessory);
+        if (acc && acc.id !== 'none') {
+            const bandGroup = new THREE.Group();
+            const band = new THREE.Mesh(
+                new THREE.TorusGeometry(0.038, 0.009, 10, 20),
+                new THREE.MeshStandardMaterial({ color: acc.color, metalness: 0.85, roughness: 0.2, emissive: acc.color, emissiveIntensity: 0.35 })
+            );
+            band.rotation.x = Math.PI / 2;
+            band.position.y = 0.035;
+            bandGroup.add(band);
+
+            const dial = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.018, 0.018, 0.012, 16),
+                new THREE.MeshStandardMaterial({ color: 0x111116, emissive: acc.color, emissiveIntensity: 0.7 })
+            );
+            dial.rotation.z = Math.PI / 2;
+            dial.position.set(-0.038, 0.035, 0);
+            bandGroup.add(dial);
+
+            bodyParts.leftArm.wristPivot.add(bandGroup);
+            bodyParts.accessoryMesh = bandGroup;
+        }
+
+        if (bodyParts.flashlightMesh) {
+            bodyParts.rightArm.wristPivot.remove(bodyParts.flashlightMesh);
+            bodyParts.flashlightMesh = null;
+        }
+        const fl = FLASHLIGHTS.find(f => f.id === saveData.equippedFlashlight) || FLASHLIGHTS[0];
+        const flGroup = new THREE.Group();
+        const barrel = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.022, 0.02, 0.19, 16),
+            new THREE.MeshStandardMaterial({ color: 0x27272a, metalness: 0.8, roughness: 0.3 })
+        );
+        barrel.rotation.x = Math.PI / 2;
+        barrel.position.set(0, -0.055, -0.05);
+        flGroup.add(barrel);
+
+        const head = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.032, 0.023, 0.05, 16),
+            new THREE.MeshStandardMaterial({ color: fl.color, metalness: 0.7, roughness: 0.2 })
+        );
+        head.rotation.x = Math.PI / 2;
+        head.position.set(0, -0.055, -0.155);
+        flGroup.add(head);
+
+        const lens = new THREE.Mesh(
+            new THREE.CircleGeometry(0.028, 16),
+            new THREE.MeshBasicMaterial({ color: fl.color })
+        );
+        lens.rotation.y = Math.PI;
+        lens.position.set(0, -0.055, -0.181);
+        flGroup.add(lens);
+
+        bodyParts.rightArm.wristPivot.add(flGroup);
+        bodyParts.flashlightMesh = flGroup;
+
+        flashSpot.color.setHex(fl.color);
+        flashSpot.distance = fl.range;
+    }
+
+    createAnatomicalPlayerBody();
+
+    // ==================== 8. ULTRA-DETAILED ANATOMICAL 3D MONSTERS ====================
+    function buildEntityModel(type) {
+        const root = new THREE.Group();
+
+        if (type === 'rusher') {
+            const boneMat = new THREE.MeshStandardMaterial({
+                color: 0x1a090c,
+                emissive: 0x7f1d1d,
+                emissiveIntensity: 0.65,
+                roughness: 0.32,
+                metalness: 0.25
+            });
+            const sinewMat = new THREE.MeshStandardMaterial({
+                color: 0x450a0a,
+                emissive: 0x991b1b,
+                emissiveIntensity: 0.45,
+                roughness: 0.55
+            });
+
+            const cranium = new THREE.Mesh(new THREE.SphereGeometry(0.54, 28, 28), boneMat);
+            cranium.scale.set(0.88, 1.24, 1.05);
+            cranium.position.y = 1.52;
+            root.add(cranium);
+
+            const brow = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.08, 12, 24, Math.PI), boneMat);
+            brow.position.set(0, 1.62, 0.36);
+            brow.rotation.x = 0.25;
+            root.add(brow);
+
+            const jawGroup = new THREE.Group();
+            jawGroup.position.set(0, 1.22, 0.14);
+            const mandible = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.18, 0.48, 18), boneMat);
+            mandible.position.set(0, -0.22, 0.1);
+            jawGroup.add(mandible);
+
+            const fangMat = new THREE.MeshStandardMaterial({ color: 0xe4e4e7, roughness: 0.2 });
+            for (let t = -3; t <= 3; t++) {
+                const upperTooth = new THREE.Mesh(new THREE.ConeGeometry(0.032, 0.15, 8), fangMat);
+                upperTooth.rotation.x = Math.PI;
+                upperTooth.position.set(t * 0.075, 1.24, 0.46);
+                root.add(upperTooth);
+
+                const lowerTooth = new THREE.Mesh(new THREE.ConeGeometry(0.028, 0.14, 8), fangMat);
+                lowerTooth.position.set(t * 0.07, -0.05, 0.28);
+                jawGroup.add(lowerTooth);
+            }
+            root.add(jawGroup);
+
+            [-1, 1].forEach(side => {
+                const horn = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.85, 14), boneMat);
+                horn.position.set(side * 0.36, 1.98, -0.22);
+                horn.rotation.x = -0.65;
+                horn.rotation.z = -side * 0.38;
+                root.add(horn);
+
+                const tendril = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.015, 1.35, 12), sinewMat);
+                tendril.position.set(side * 0.28, 0.92, -0.45);
+                tendril.rotation.x = 0.42;
+                root.add(tendril);
+            });
+
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff3b30 });
+            [-0.19, 0.19].forEach(ex => {
+                const eye = new THREE.Mesh(new THREE.SphereGeometry(0.075, 14, 14), eyeMat);
+                eye.position.set(ex, 1.56, 0.48);
+                root.add(eye);
+            });
+
+            const aura = new THREE.PointLight(0xdc2626, 3.4, 13);
+            aura.position.set(0, 1.5, 0.2);
+            root.add(aura);
+
+            root.userData = { head: cranium, jaw: jawGroup };
+        } else if (type === 'watcher') {
+            const robeMat = new THREE.MeshStandardMaterial({ color: 0x0b0518, roughness: 0.92, side: THREE.DoubleSide });
+            const paleMat = new THREE.MeshStandardMaterial({ color: 0x3b2d4d, roughness: 0.65 });
+
+            const outerCloak = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.78, 2.35, 24, 1, true), robeMat);
+            outerCloak.position.y = 1.25;
+            root.add(outerCloak);
+
+            const innerTorso = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.16, 1.4, 16), paleMat);
+            innerTorso.position.y = 1.65;
+            root.add(innerTorso);
+
+            const cowl = new THREE.Mesh(new THREE.SphereGeometry(0.36, 22, 22), robeMat);
+            cowl.scale.set(0.95, 1.25, 1.05);
+            cowl.position.y = 2.48;
+            root.add(cowl);
+
+            [-1, 1].forEach(side => {
+                const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.025, 0.85, 10), paleMat);
+                arm.position.set(side * 0.34, 1.72, 0.24);
+                arm.rotation.x = -0.75;
+                arm.rotation.z = side * 0.2;
+                root.add(arm);
+            });
+
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0xd8b4fe });
+            const eyeCoords = [[0, 2.52, 0.32], [-0.13, 2.45, 0.29], [0.13, 2.45, 0.29], [0, 2.36, 0.31], [-0.45, 2.65, 0.1], [0.45, 2.65, 0.1]];
+            eyeCoords.forEach(([x, y, z]) => {
+                const e = new THREE.Mesh(new THREE.SphereGeometry(0.042, 12, 12), eyeMat);
+                e.position.set(x, y, z);
+                root.add(e);
+            });
+
+            const aura = new THREE.PointLight(0x9333ea, 2.5, 10);
+            aura.position.set(0, 2.2, 0.2);
+            root.add(aura);
+
+            root.userData = { head: cowl };
+        } else {
+            const skinMat = new THREE.MeshStandardMaterial({ color: 0x241d20, roughness: 0.62, metalness: 0.08 });
+            const boneAccent = new THREE.MeshStandardMaterial({ color: 0x3b3135, roughness: 0.5 });
+
+            const pelvis = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.13, 0.22, 14), skinMat);
+            pelvis.position.y = 0.98;
+            root.add(pelvis);
+
+            const ribcage = new THREE.Mesh(new THREE.CylinderGeometry(0.21, 0.14, 0.62, 16), skinMat);
+            ribcage.scale.set(1.15, 1, 0.78);
+            ribcage.position.set(0, 1.44, 0.06);
+            ribcage.rotation.x = 0.18;
+            root.add(ribcage);
+
+            for (let r = 0; r < 4; r++) {
+                const rib = new THREE.Mesh(new THREE.TorusGeometry(0.18 - r * 0.012, 0.016, 8, 16, Math.PI * 1.3), boneAccent);
+                rib.position.set(0, 1.62 - r * 0.11, 0.09);
+                rib.rotation.x = Math.PI / 2 + 0.18;
+                rib.rotation.z = -Math.PI * 0.15;
+                root.add(rib);
+            }
+
+            const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.085, 0.24, 12), skinMat);
+            neck.position.set(0, 1.84, 0.15);
+            neck.rotation.x = 0.35;
+            root.add(neck);
+
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.175, 18, 18), skinMat);
+            head.scale.set(0.84, 1.22, 0.96);
+            head.position.set(0, 2.04, 0.22);
+            root.add(head);
+
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0xfbbf24 });
+            [-0.065, 0.065].forEach(ex => {
+                const eye = new THREE.Mesh(new THREE.SphereGeometry(0.028, 10, 10), eyeMat);
+                eye.position.set(ex, 2.06, 0.36);
+                root.add(eye);
+            });
+
+            function makeStalkerLimb(isLeg, side) {
+                const pivot = new THREE.Group();
+                pivot.position.set(side * (isLeg ? 0.11 : 0.26), isLeg ? 0.94 : 1.68, isLeg ? 0 : 0.08);
+                const upper = new THREE.Mesh(new THREE.CylinderGeometry(isLeg ? 0.06 : 0.042, isLeg ? 0.045 : 0.032, isLeg ? 0.48 : 0.56, 12), skinMat);
+                upper.position.y = isLeg ? -0.24 : -0.28;
+                const joint = new THREE.Mesh(new THREE.SphereGeometry(isLeg ? 0.048 : 0.036, 10, 10), boneAccent);
+                joint.position.y = isLeg ? -0.48 : -0.56;
+                const lower = new THREE.Mesh(new THREE.CylinderGeometry(isLeg ? 0.044 : 0.03, isLeg ? 0.028 : 0.016, isLeg ? 0.46 : 0.58, 12), skinMat);
+                lower.position.y = isLeg ? -0.71 : -0.85;
+                pivot.add(upper, joint, lower);
+                if (!isLeg) pivot.rotation.x = -0.42;
+                return pivot;
+            }
+
+            const leftArm = makeStalkerLimb(false, -1);
+            const rightArm = makeStalkerLimb(false, 1);
+            const leftLeg = makeStalkerLimb(true, -1);
+            const rightLeg = makeStalkerLimb(true, 1);
+            root.add(leftArm, rightArm, leftLeg, rightLeg);
+
+            root.userData = { head, leftArm, rightArm, leftLeg, rightLeg };
+        }
+
+        return root;
+    }
+
+    // ==================== 9. CRYSTAL-CLEAR HAUNTED GRAND LOBBY BACKDROP (MAIN MENU) ====================
+    const menuBackdropGroup = new THREE.Group();
+    scene.add(menuBackdropGroup);
+    const menuTorches = [];
+    const menuDustParticles = [];
+
+    function buildMenuGrandLobby() {
+        const floorMat = new THREE.MeshStandardMaterial({
+            map: texCarpet,
+            bumpMap: bumpCarpet,
+            bumpScale: 0.04,
+            roughness: 0.75
+        });
+        const lobbyFloor = new THREE.Mesh(new THREE.PlaneGeometry(16, 26), floorMat);
+        lobbyFloor.rotation.x = -Math.PI / 2;
+        lobbyFloor.position.set(0, 0, -6);
+        lobbyFloor.receiveShadow = true;
+        menuBackdropGroup.add(lobbyFloor);
+
+        const wallMat = new THREE.MeshStandardMaterial({
+            map: texWall,
+            bumpMap: bumpWall,
+            bumpScale: 0.045,
+            color: 0x353542,
+            roughness: 0.65
+        });
+        const trimMat = new THREE.MeshStandardMaterial({ color: 0x261710, roughness: 0.45 });
+
+        const lobbyVault = new THREE.Mesh(
+            new THREE.CylinderGeometry(7.2, 7.2, 26, 24, 1, true, 0, Math.PI),
+            new THREE.MeshStandardMaterial({ color: 0x1e1e28, side: THREE.BackSide, roughness: 0.8 })
+        );
+        lobbyVault.rotation.z = Math.PI / 2;
+        lobbyVault.rotation.y = Math.PI / 2;
+        lobbyVault.position.set(0, 3.2, -6);
+        menuBackdropGroup.add(lobbyVault);
+
+        const leftWall = new THREE.Mesh(new THREE.PlaneGeometry(26, 3.5), wallMat);
+        leftWall.rotation.y = Math.PI / 2;
+        leftWall.position.set(-7.0, 1.75, -6);
+
+        const rightWall = new THREE.Mesh(new THREE.PlaneGeometry(26, 3.5), wallMat);
+        rightWall.rotation.y = -Math.PI / 2;
+        rightWall.position.set(7.0, 1.75, -6);
+
+        const backWall = new THREE.Mesh(new THREE.PlaneGeometry(14.5, 9.0), wallMat);
+        backWall.position.set(0, 4.5, -16);
+        menuBackdropGroup.add(leftWall, rightWall, backWall);
+
+        for (let z = -2; z >= -14; z -= 4) {
+            [-5.6, 5.6].forEach(xPos => {
+                const col = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.45, 5.2, 18), trimMat);
+                col.position.set(xPos, 2.6, z);
+                menuBackdropGroup.add(col);
+
+                const flame = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.11, 12, 12),
+                    new THREE.MeshBasicMaterial({ color: 0xfbbf24 })
+                );
+                flame.position.set(xPos * 0.88, 2.5, z);
+                menuBackdropGroup.add(flame);
+
+                const torchLight = new THREE.PointLight(0xffb74d, 2.1, 14);
+                torchLight.position.set(xPos * 0.85, 2.6, z);
+                menuBackdropGroup.add(torchLight);
+                menuTorches.push({ light: torchLight, flame, phase: Math.random() * Math.PI * 2 });
+            });
+        }
+
+        const doorFrame = new THREE.Mesh(new THREE.BoxGeometry(2.7, 3.6, 0.4), trimMat);
+        doorFrame.position.set(0, 1.8, -15.75);
+        const doorLeaf = new THREE.Mesh(
+            new THREE.BoxGeometry(2.2, 3.35, 0.25),
+            new THREE.MeshStandardMaterial({ map: texWood, color: 0x6b3218, roughness: 0.45 })
+        );
+        doorLeaf.position.set(0, 1.675, -15.65);
+
+        const lobbyPlaque = createDoorNumberPlaque('001', false);
+        lobbyPlaque.position.set(0, 2.35, -15.48);
+        menuBackdropGroup.add(doorFrame, doorLeaf, lobbyPlaque);
+
+        const chandelierLight = new THREE.PointLight(0xffedd5, 2.4, 24);
+        chandelierLight.position.set(0, 4.5, -8.5);
+        menuBackdropGroup.add(chandelierLight);
+
+        const dustMat = new THREE.MeshBasicMaterial({ color: 0xfef3c7, transparent: true, opacity: 0.45 });
+        const dustGeo = new THREE.SphereGeometry(0.024, 6, 6);
+        for (let i = 0; i < 45; i++) {
+            const p = new THREE.Mesh(dustGeo, dustMat);
+            p.position.set((Math.random() - 0.5) * 9, 0.4 + Math.random() * 4.2, -1 - Math.random() * 14);
+            menuBackdropGroup.add(p);
+            menuDustParticles.push({ mesh: p, speed: 0.14 + Math.random() * 0.24, offset: Math.random() * Math.PI * 2 });
+        }
+    }
+
+    buildMenuGrandLobby();
+
+    // ==================== 10. SEAMLESS ARCHITECTURAL ROOMS (NO TELEPORTS, CIRCULAR VAULTED ROOFS, ROTUNDAS, TRIANGULAR & TWISTING HALLWAYS) ====================
+    const worldGroup = new THREE.Group();
+    scene.add(worldGroup);
+
+    const playerPos = new THREE.Vector3(0, 1.68, 0);
+    const playerRot = { yaw: 0, pitch: 0 };
+
+    function clearWorld() {
+        while (worldGroup.children.length > 0) {
+            worldGroup.remove(worldGroup.children[0]);
+        }
+        state.interactables = [];
+        state.pickups = [];
+        state.roomLights = [];
+        state.animatedClosets = [];
+        state.animatedDrawers = [];
+        state.activeEntities = [];
+        state.activeRooms = [];
+        state.currentRoomObj = null;
+        state.isHiding = false;
+        state.activeCloset = null;
+        document.getElementById('hiding-banner').classList.add('hidden');
+        document.getElementById('entity-sign-banner').classList.add('hidden');
+    }
+
+    function buildArchedDoorAssembly(parentGroup, numberText, isAbyss, localX, localZ, localRotY = 0) {
+        const assembly = new THREE.Group();
+        assembly.position.set(localX, 0, localZ);
+        assembly.rotation.y = localRotY;
+
+        const trimMat = new THREE.MeshStandardMaterial({ color: 0x161210, roughness: 0.42, metalness: 0.25 });
+        const woodMat = new THREE.MeshStandardMaterial({
+            map: texWood,
+            bumpMap: bumpWood,
+            bumpScale: 0.05,
+            color: isAbyss ? 0x0c4a6e : 0x5c2c16,
+            roughness: 0.48
+        });
+
+        const leftJamb = new THREE.Mesh(new THREE.BoxGeometry(0.24, 2.75, 0.36), trimMat);
+        leftJamb.position.set(-0.92, 1.375, 0);
+        const rightJamb = new THREE.Mesh(new THREE.BoxGeometry(0.24, 2.75, 0.36), trimMat);
+        rightJamb.position.set(0.92, 1.375, 0);
+
+        const archOuter = new THREE.Mesh(new THREE.CylinderGeometry(1.04, 1.04, 0.36, 24, 1, false, 0, Math.PI), trimMat);
+        archOuter.rotation.z = Math.PI / 2;
+        archOuter.rotation.y = Math.PI / 2;
+        archOuter.position.set(0, 2.72, 0);
+
+        assembly.add(leftJamb, rightJamb, archOuter);
+
+        const doorPivot = new THREE.Group();
+        doorPivot.position.set(-0.8, 0, 0.04);
+
+        const doorLeaf = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.72, 0.14), woodMat);
+        doorLeaf.position.set(0.8, 1.36, 0);
+        doorLeaf.castShadow = true;
+
+        const doorArchTop = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 0.14, 24, 1, false, 0, Math.PI), woodMat);
+        doorArchTop.rotation.z = Math.PI / 2;
+        doorArchTop.rotation.y = Math.PI / 2;
+        doorArchTop.position.set(0.8, 2.72, 0);
+
+        const panelMat = new THREE.MeshStandardMaterial({ color: isAbyss ? 0x082f49 : 0x3b1a0b, roughness: 0.55 });
+        const upperPanel = new THREE.Mesh(new THREE.BoxGeometry(1.12, 0.95, 0.17), panelMat);
+        upperPanel.position.set(0.8, 2.02, 0);
+        const lowerPanel = new THREE.Mesh(new THREE.BoxGeometry(1.12, 0.95, 0.17), panelMat);
+        lowerPanel.position.set(0.8, 0.82, 0);
+
+        const brassMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.88, roughness: 0.22 });
+        const handleBase = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.18, 12), brassMat);
+        handleBase.rotation.x = Math.PI / 2;
+        handleBase.position.set(1.42, 1.24, 0);
+        const handleGrip = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.035, 0.22), brassMat);
+        handleGrip.position.set(1.35, 1.24, 0);
+
+        const plaque = createDoorNumberPlaque(numberText, isAbyss);
+        plaque.position.set(0.8, 2.15, 0.08);
+
+        doorPivot.add(doorLeaf, doorArchTop, upperPanel, lowerPanel, handleBase, handleGrip, plaque);
+        assembly.add(doorPivot);
+        parentGroup.add(assembly);
+
+        return doorPivot;
+    }
+
+    function localToWorld(roomObj, lx, ly, lz) {
+        return new THREE.Vector3(lx, ly, lz)
+            .applyAxisAngle(new THREE.Vector3(0, 1, 0), roomObj.worldYaw)
+            .add(roomObj.worldOrigin);
+    }
+
+    function buildDynamicCloset(roomObj, lx, lz, localRotY) {
+        const closetGroup = new THREE.Group();
+        closetGroup.position.set(lx, 0, lz);
+        closetGroup.rotation.y = localRotY;
+
+        const woodMat = new THREE.MeshStandardMaterial({ map: texWood, bumpMap: bumpWood, bumpScale: 0.04, roughness: 0.58 });
+        const trimMat = new THREE.MeshStandardMaterial({ color: 0x18100c, roughness: 0.5 });
+
+        const backPanel = new THREE.Mesh(new THREE.BoxGeometry(1.36, 2.55, 0.1), woodMat);
+        backPanel.position.set(0, 1.275, -0.52);
+        const leftSide = new THREE.Mesh(new THREE.BoxGeometry(0.1, 2.55, 1.12), woodMat);
+        leftSide.position.set(-0.63, 1.275, 0);
+        const rightSide = new THREE.Mesh(new THREE.BoxGeometry(0.1, 2.55, 1.12), woodMat);
+        rightSide.position.set(0.63, 1.275, 0);
+        const crownTop = new THREE.Mesh(new THREE.BoxGeometry(1.46, 0.16, 1.22), trimMat);
+        crownTop.position.set(0, 2.58, 0);
+        const baseFloor = new THREE.Mesh(new THREE.BoxGeometry(1.36, 0.1, 1.12), trimMat);
+        baseFloor.position.set(0, 0.05, 0);
+
+        closetGroup.add(backPanel, leftSide, rightSide, crownTop, baseFloor);
+
+        const leftDoorPivot = new THREE.Group();
+        leftDoorPivot.position.set(-0.58, 0, 0.52);
+        const leftDoorLeaf = new THREE.Mesh(new THREE.BoxGeometry(0.57, 2.38, 0.06), woodMat);
+        leftDoorLeaf.position.set(0.285, 1.26, 0);
+        leftDoorPivot.add(leftDoorLeaf);
+
+        const rightDoorPivot = new THREE.Group();
+        rightDoorPivot.position.set(0.58, 0, 0.52);
+        const rightDoorLeaf = new THREE.Mesh(new THREE.BoxGeometry(0.57, 2.38, 0.06), woodMat);
+        rightDoorLeaf.position.set(-0.285, 1.26, 0);
+        rightDoorPivot.add(rightDoorLeaf);
+
+        for (let sy = 0.5; sy <= 2.0; sy += 0.22) {
+            const slatL = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.05, 0.08), trimMat);
+            slatL.position.set(0.285, sy, 0);
+            leftDoorPivot.add(slatL);
+
+            const slatR = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.05, 0.08), trimMat);
+            slatR.position.set(-0.285, sy, 0);
+            rightDoorPivot.add(slatR);
+        }
+
+        closetGroup.add(leftDoorPivot, rightDoorPivot);
+        roomObj.group.add(closetGroup);
+
+        const closetAnim = { leftDoorPivot, rightDoorPivot, openAmount: 0, targetOpen: 0 };
+        state.animatedClosets.push(closetAnim);
+
+        const frontLocal = new THREE.Vector3(0, 1.2, 1.15).applyAxisAngle(new THREE.Vector3(0, 1, 0), localRotY).add(new THREE.Vector3(lx, 0, lz));
+        state.interactables.push({
+            roomNumber: roomObj.roomNumber,
+            type: 'closet',
+            pos: localToWorld(roomObj, frontLocal.x, frontLocal.y, frontLocal.z),
+            closetCenter: localToWorld(roomObj, lx, 1.65, lz),
+            closetAnim,
+            label: 'Hide in Closet [E]'
+        });
+    }
+
+    function buildInteractiveDresser(roomObj, lx, lz, localRotY) {
+        const dresser = new THREE.Group();
+        dresser.position.set(lx, 0, lz);
+        dresser.rotation.y = localRotY;
+
+        const woodMat = new THREE.MeshStandardMaterial({ map: texWood, bumpMap: bumpWood, bumpScale: 0.04, roughness: 0.55 });
+        const knobMat = new THREE.MeshStandardMaterial({ color: 0xd97706, metalness: 0.85, roughness: 0.25 });
+
+        const body = new THREE.Mesh(new THREE.BoxGeometry(1.35, 1.05, 0.65), woodMat);
+        body.position.set(0, 0.525, 0);
+        body.castShadow = true;
+        dresser.add(body);
+
+        [0.74, 0.34].forEach((dy, dIdx) => {
+            const drawerPivot = new THREE.Group();
+            drawerPivot.position.set(0, dy, 0.31);
+
+            const frontFace = new THREE.Mesh(new THREE.BoxGeometry(1.18, 0.32, 0.06), woodMat);
+            const trayBox = new THREE.Mesh(new THREE.BoxGeometry(1.12, 0.22, 0.48), new THREE.MeshStandardMaterial({ color: 0x1c0f08 }));
+            trayBox.position.set(0, -0.04, -0.24);
+
+            const knobL = new THREE.Mesh(new THREE.SphereGeometry(0.032, 10, 10), knobMat);
+            knobL.position.set(-0.32, 0, 0.04);
+            const knobR = new THREE.Mesh(new THREE.SphereGeometry(0.032, 10, 10), knobMat);
+            knobR.position.set(0.32, 0, 0.04);
+
+            drawerPivot.add(frontFace, trayBox, knobL, knobR);
+            dresser.add(drawerPivot);
+
+            const roll = Math.random();
+            let lootType = 'empty';
+            let lootMesh = null;
+            if (roll < 0.55) {
+                lootType = 'coins';
+                lootMesh = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.11, 0.11, 0.04, 14),
+                    new THREE.MeshStandardMaterial({ color: 0xfbbf24, emissive: 0x92400e, metalness: 0.9 })
+                );
+                lootMesh.position.set(0, -0.02, -0.22);
+                drawerPivot.add(lootMesh);
+            } else if (roll < 0.73) {
+                lootType = Math.random() > 0.45 ? 'battery' : 'potion';
+                lootMesh = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.055, 0.055, 0.16, 12),
+                    new THREE.MeshStandardMaterial({
+                        color: lootType === 'battery' ? 0x38bdf8 : 0x10b981,
+                        emissive: lootType === 'battery' ? 0x0284c7 : 0x059669
+                    })
+                );
+                lootMesh.position.set(0, 0.02, -0.22);
+                drawerPivot.add(lootMesh);
+            } else if (roll < 0.83) {
+                lootType = 'mimic';
+                lootMesh = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.13, 12, 12),
+                    new THREE.MeshBasicMaterial({ color: 0xef4444 })
+                );
+                lootMesh.position.set(0, 0.02, -0.22);
+                drawerPivot.add(lootMesh);
+            }
+
+            const drawerData = {
+                drawerPivot,
+                opened: false,
+                slideAmount: 0,
+                lootType,
+                lootMesh
+            };
+            state.animatedDrawers.push(drawerData);
+
+            const frontOffset = new THREE.Vector3((dIdx === 0 ? -0.15 : 0.15), dy, 0.78)
+                .applyAxisAngle(new THREE.Vector3(0, 1, 0), localRotY)
+                .add(new THREE.Vector3(lx, 0, lz));
+
+            state.interactables.push({
+                roomNumber: roomObj.roomNumber,
+                type: 'drawer',
+                pos: localToWorld(roomObj, frontOffset.x, frontOffset.y, frontOffset.z),
+                drawerData,
+                label: 'Open Drawer [E]'
+            });
+        });
+
+        roomObj.group.add(dresser);
+    }
+
+    function buildPortalWall(parentGroup, wallWidth, wallHeight, wallMat, lx, lz, rotY) {
+        const portalGroup = new THREE.Group();
+        portalGroup.position.set(lx, 0, lz);
+        portalGroup.rotation.y = rotY;
+
+        const sideW = (wallWidth - 1.9) / 2;
+        if (sideW > 0.05) {
+            const leftP = new THREE.Mesh(new THREE.PlaneGeometry(sideW, wallHeight), wallMat);
+            leftP.position.set(-(1.9 / 2 + sideW / 2), wallHeight / 2, 0);
+            const rightP = new THREE.Mesh(new THREE.PlaneGeometry(sideW, wallHeight), wallMat);
+            rightP.position.set(1.9 / 2 + sideW / 2, wallHeight / 2, 0);
+            portalGroup.add(leftP, rightP);
+        }
+
+        const headerH = Math.max(0.2, wallHeight - 2.85);
+        const headerP = new THREE.Mesh(new THREE.PlaneGeometry(1.9, headerH), wallMat);
+        headerP.position.set(0, 2.85 + headerH / 2, 0);
+        portalGroup.add(headerP);
+
+        parentGroup.add(portalGroup);
+    }
+
+    function createRoomSegment(roomNum, worldOrigin, worldYaw) {
+        const isAbyss = state.mode === 'abyss';
+        const absRoom = Math.abs(roomNum);
+        const shapes = ['vaulted_hall', 'rotunda_round', 'triangular_gallery', 'twisting_bend'];
+        const shapeType = absRoom === 1 ? 'vaulted_hall' : shapes[(absRoom + Math.floor(Math.random() * 2)) % shapes.length];
+
+        const roomGroup = new THREE.Group();
+        roomGroup.position.copy(worldOrigin);
+        roomGroup.rotation.y = worldYaw;
+        worldGroup.add(roomGroup);
+
+        const floorMat = new THREE.MeshStandardMaterial({
+            map: isAbyss ? texAbyss : texCarpet,
+            bumpMap: isAbyss ? bumpAbyss : bumpCarpet,
+            bumpScale: 0.045,
+            roughness: isAbyss ? 0.28 : 0.85,
+            metalness: isAbyss ? 0.45 : 0.05
+        });
+        const wallMat = new THREE.MeshStandardMaterial({
+            map: isAbyss ? texAbyss : texWall,
+            bumpMap: isAbyss ? bumpWall : bumpWall,
+            bumpScale: 0.05,
+            roughness: 0.72,
+            side: THREE.DoubleSide
+        });
+        const domeMat = new THREE.MeshStandardMaterial({
+            color: isAbyss ? 0x04112b : 0x16161e,
+            bumpMap: bumpWall,
+            bumpScale: 0.03,
+            roughness: 0.82,
+            side: THREE.BackSide
+        });
+        const ribMat = new THREE.MeshStandardMaterial({ map: texWood, roughness: 0.5 });
+
+        const roomObj = {
+            roomNumber: roomNum,
+            shapeType,
+            group: roomGroup,
+            worldOrigin: worldOrigin.clone(),
+            worldYaw,
+            exitLocalPos: new THREE.Vector3(0, 0, -22),
+            exitLocalYaw: 0,
+            exitWorldPos: new THREE.Vector3(),
+            exitWorldYaw: worldYaw,
+            doorMesh: null,
+            doorOpen: false,
+            colliders: []
+        };
+
+        if (shapeType === 'rotunda_round') {
+            const radius = 6.4;
+            const centerZ = -7.5;
+            const wallH = 3.6;
+
+            const floorDisc = new THREE.Mesh(new THREE.CircleGeometry(radius + 0.4, 24), floorMat);
+            floorDisc.rotation.x = -Math.PI / 2;
+            floorDisc.position.set(0, 0, centerZ);
+            floorDisc.receiveShadow = true;
+            roomGroup.add(floorDisc);
+
+            const dome = new THREE.Mesh(new THREE.SphereGeometry(radius + 0.35, 24, 14, 0, Math.PI * 2, 0, Math.PI * 0.52), domeMat);
+            dome.scale.set(1, 0.65, 1);
+            dome.position.set(0, wallH - 0.2, centerZ);
+            roomGroup.add(dome);
+
+            const segCount = 12;
+            for (let s = 0; s < segCount; s++) {
+                const ang = (s / segCount) * Math.PI * 2;
+                if (s === 0 || s === segCount / 2) continue;
+                const wx = Math.sin(ang) * radius;
+                const wz = centerZ + Math.cos(ang) * radius;
+                const segW = (2 * Math.PI * radius) / segCount + 0.25;
+                const wallSeg = new THREE.Mesh(new THREE.PlaneGeometry(segW, wallH), wallMat);
+                wallSeg.position.set(wx, wallH / 2, wz);
+                wallSeg.rotation.y = ang + Math.PI;
+                roomGroup.add(wallSeg);
+
+                const rib = new THREE.Mesh(new THREE.TorusGeometry(radius, 0.14, 8, 18, Math.PI * 0.48), ribMat);
+                rib.position.set(0, wallH - 0.1, centerZ);
+                rib.rotation.y = ang;
+                roomGroup.add(rib);
+            }
+
+            const entFloor = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 2.2), floorMat);
+            entFloor.rotation.x = -Math.PI / 2;
+            entFloor.position.set(0, 0, -0.6);
+            roomGroup.add(entFloor);
+
+            buildPortalWall(roomGroup, 3.6, wallH, wallMat, 0, 0.2, 0);
+            buildPortalWall(roomGroup, 3.6, wallH, wallMat, 0, -14.2, 0);
+
+            roomObj.exitLocalPos.set(0, 0, -14.2);
+            roomObj.exitLocalYaw = 0;
+            roomObj.colliders.push({ type: 'circle', cx: 0, cz: centerZ, maxR: radius - 0.75, portalHalfW: 0.95 });
+
+            const centerCol = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.72, wallH + 2.2, 18), ribMat);
+            centerCol.position.set(0, (wallH + 2.2) / 2, centerZ);
+            roomGroup.add(centerCol);
+
+            buildDynamicCloset(roomObj, -4.6, centerZ - 1.2, Math.PI * 0.42);
+            buildDynamicCloset(roomObj, 4.6, centerZ + 1.2, -Math.PI * 0.58);
+            buildInteractiveDresser(roomObj, -4.4, centerZ + 2.1, Math.PI * 0.65);
+            buildInteractiveDresser(roomObj, 4.4, centerZ - 2.1, -Math.PI * 0.35);
+
+            const pLight = new THREE.PointLight(isAbyss ? 0x0ea5e9 : 0xffedd5, isAbyss ? 0.9 : 1.35, 18);
+            pLight.position.set(0, wallH + 1.2, centerZ);
+            roomGroup.add(pLight);
+            state.roomLights.push({ light: pLight, baseIntensity: pLight.intensity });
+
+        } else if (shapeType === 'triangular_gallery') {
+            const length = 20;
+            const baseW = 9.2;
+            const apexH = 5.4;
+
+            const floor = new THREE.Mesh(new THREE.PlaneGeometry(baseW, length), floorMat);
+            floor.rotation.x = -Math.PI / 2;
+            floor.position.set(0, 0, -length / 2);
+            floor.receiveShadow = true;
+            roomGroup.add(floor);
+
+            const slopeLen = Math.hypot(baseW / 2, apexH);
+            const slopeAngle = Math.atan2(baseW / 2, apexH);
+
+            const leftSlope = new THREE.Mesh(new THREE.PlaneGeometry(length, slopeLen), wallMat);
+            leftSlope.position.set(-baseW / 4, apexH / 2, -length / 2);
+            leftSlope.rotation.y = Math.PI / 2;
+            leftSlope.rotation.x = slopeAngle;
+
+            const rightSlope = new THREE.Mesh(new THREE.PlaneGeometry(length, slopeLen), wallMat);
+            rightSlope.position.set(baseW / 4, apexH / 2, -length / 2);
+            rightSlope.rotation.y = -Math.PI / 2;
+            rightSlope.rotation.x = slopeAngle;
+            roomGroup.add(leftSlope, rightSlope);
+
+            const cupola = new THREE.Mesh(new THREE.CylinderGeometry(2.1, 2.5, 2.2, 20, 1, true), domeMat);
+            cupola.position.set(0, apexH - 0.2, -length / 2);
+            const cupolaCap = new THREE.Mesh(new THREE.SphereGeometry(2.1, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), domeMat);
+            cupolaCap.position.set(0, apexH + 0.9, -length / 2);
+            roomGroup.add(cupola, cupolaCap);
+
+            buildPortalWall(roomGroup, baseW, apexH, wallMat, 0, 0, 0);
+            buildPortalWall(roomGroup, baseW, apexH, wallMat, 0, -length, 0);
+
+            roomObj.exitLocalPos.set(0, 0, -length);
+            roomObj.exitLocalYaw = 0;
+            roomObj.colliders.push({ type: 'box', minX: -2.9, maxX: 2.9, minZ: -length, maxZ: 0 });
+
+            buildDynamicCloset(roomObj, -2.55, -7, Math.PI / 2);
+            buildDynamicCloset(roomObj, 2.55, -13, -Math.PI / 2);
+            buildInteractiveDresser(roomObj, -2.65, -13.5, Math.PI / 2);
+            buildInteractiveDresser(roomObj, 2.65, -6.5, -Math.PI / 2);
+
+            const pLight = new THREE.PointLight(isAbyss ? 0x0ea5e9 : 0xffedd5, isAbyss ? 0.85 : 1.25, 18);
+            pLight.position.set(0, apexH + 0.5, -length / 2);
+            roomGroup.add(pLight);
+            state.roomLights.push({ light: pLight, baseIntensity: pLight.intensity });
+
+        } else if (shapeType === 'twisting_bend') {
+            const turnDir = absRoom % 2 === 0 ? 1 : -1;
+            const hallW = 5.4;
+            const barrelR = hallW / 2;
+            const springH = 2.4;
+
+            const floor1 = new THREE.Mesh(new THREE.PlaneGeometry(hallW, 13.5), floorMat);
+            floor1.rotation.x = -Math.PI / 2;
+            floor1.position.set(0, 0, -6.75);
+            roomGroup.add(floor1);
+
+            const vault1 = new THREE.Mesh(new THREE.CylinderGeometry(barrelR, barrelR, 13.5, 20, 1, true, 0, Math.PI), domeMat);
+            vault1.rotation.z = Math.PI / 2;
+            vault1.rotation.y = Math.PI / 2;
+            vault1.position.set(0, springH, -6.75);
+            roomGroup.add(vault1);
+
+            const outerW1 = new THREE.Mesh(new THREE.PlaneGeometry(13.5, springH + barrelR), wallMat);
+            outerW1.rotation.y = turnDir === 1 ? Math.PI / 2 : -Math.PI / 2;
+            outerW1.position.set(-turnDir * barrelR, (springH + barrelR) / 2, -6.75);
+
+            const innerW1 = new THREE.Mesh(new THREE.PlaneGeometry(8.1, springH + barrelR), wallMat);
+            innerW1.rotation.y = turnDir === 1 ? -Math.PI / 2 : Math.PI / 2;
+            innerW1.position.set(turnDir * barrelR, (springH + barrelR) / 2, -4.05);
+
+            const cornerEndW = new THREE.Mesh(new THREE.PlaneGeometry(hallW, springH + barrelR), wallMat);
+            cornerEndW.position.set(0, (springH + barrelR) / 2, -13.5);
+            roomGroup.add(outerW1, innerW1, cornerEndW);
+
+            const leg2CenterZ = -10.8;
+            const floor2 = new THREE.Mesh(new THREE.PlaneGeometry(11.5, hallW), floorMat);
+            floor2.rotation.x = -Math.PI / 2;
+            floor2.position.set(turnDir * 6.75, 0, leg2CenterZ);
+            roomGroup.add(floor2);
+
+            const vault2 = new THREE.Mesh(new THREE.CylinderGeometry(barrelR, barrelR, 11.5, 20, 1, true, 0, Math.PI), domeMat);
+            vault2.rotation.z = Math.PI / 2;
+            vault2.position.set(turnDir * 6.75, springH, leg2CenterZ);
+            roomGroup.add(vault2);
+
+            const northW2 = new THREE.Mesh(new THREE.PlaneGeometry(11.5, springH + barrelR), wallMat);
+            northW2.position.set(turnDir * 6.75, (springH + barrelR) / 2, leg2CenterZ - barrelR);
+
+            const southW2 = new THREE.Mesh(new THREE.PlaneGeometry(11.5, springH + barrelR), wallMat);
+            southW2.rotation.y = Math.PI;
+            southW2.position.set(turnDir * 6.75, (springH + barrelR) / 2, leg2CenterZ + barrelR);
+            roomGroup.add(northW2, southW2);
+
+            buildPortalWall(roomGroup, hallW, springH + barrelR, wallMat, 0, 0, 0);
+            const exitYaw = turnDir === 1 ? -Math.PI / 2 : Math.PI / 2;
+            buildPortalWall(roomGroup, hallW, springH + barrelR, wallMat, turnDir * 12.5, leg2CenterZ, exitYaw);
+
+            roomObj.exitLocalPos.set(turnDir * 12.5, 0, leg2CenterZ);
+            roomObj.exitLocalYaw = exitYaw;
+
+            roomObj.colliders.push(
+                { type: 'box', minX: -2.0, maxX: 2.0, minZ: -12.8, maxZ: 0 },
+                {
+                    type: 'box',
+                    minX: turnDir === 1 ? -1.5 : -12.5,
+                    maxX: turnDir === 1 ? 12.5 : 1.5,
+                    minZ: leg2CenterZ - 2.0,
+                    maxZ: leg2CenterZ + 2.0
+                }
+            );
+
+            buildDynamicCloset(roomObj, -turnDir * 2.05, -6.5, turnDir === 1 ? Math.PI / 2 : -Math.PI / 2);
+            buildInteractiveDresser(roomObj, turnDir * 6.8, leg2CenterZ - 2.15, 0);
+            buildDynamicCloset(roomObj, turnDir * 9.5, leg2CenterZ + 2.05, Math.PI);
+
+            const pLight1 = new THREE.PointLight(isAbyss ? 0x0ea5e9 : 0xffedd5, isAbyss ? 0.8 : 1.2, 16);
+            pLight1.position.set(0, springH + 1.4, -7.5);
+            const pLight2 = new THREE.PointLight(isAbyss ? 0x0ea5e9 : 0xffedd5, isAbyss ? 0.8 : 1.2, 16);
+            pLight2.position.set(turnDir * 7.5, springH + 1.4, leg2CenterZ);
+            roomGroup.add(pLight1, pLight2);
+            state.roomLights.push({ light: pLight1, baseIntensity: pLight1.intensity }, { light: pLight2, baseIntensity: pLight2.intensity });
+
+        } else {
+            const length = 22;
+            const hallW = 6.8;
+            const barrelR = hallW / 2;
+            const springH = 2.4;
+
+            const floor = new THREE.Mesh(new THREE.PlaneGeometry(hallW, length), floorMat);
+            floor.rotation.x = -Math.PI / 2;
+            floor.position.set(0, 0, -length / 2);
+            floor.receiveShadow = true;
+            roomGroup.add(floor);
+
+            const vault = new THREE.Mesh(new THREE.CylinderGeometry(barrelR, barrelR, length, 24, 1, true, 0, Math.PI), domeMat);
+            vault.rotation.z = Math.PI / 2;
+            vault.rotation.y = Math.PI / 2;
+            vault.position.set(0, springH, -length / 2);
+            roomGroup.add(vault);
+
+            const leftW = new THREE.Mesh(new THREE.PlaneGeometry(length, springH + barrelR), wallMat);
+            leftW.rotation.y = Math.PI / 2;
+            leftW.position.set(-barrelR, (springH + barrelR) / 2, -length / 2);
+
+            const rightW = new THREE.Mesh(new THREE.PlaneGeometry(length, springH + barrelR), wallMat);
+            rightW.rotation.y = -Math.PI / 2;
+            rightW.position.set(barrelR, (springH + barrelR) / 2, -length / 2);
+            roomGroup.add(leftW, rightW);
+
+            for (let z = -4; z >= -18; z -= 4.6) {
+                const archRib = new THREE.Mesh(new THREE.TorusGeometry(barrelR - 0.05, 0.14, 10, 24, Math.PI), ribMat);
+                archRib.position.set(0, springH, z);
+                roomGroup.add(archRib);
+            }
+
+            buildPortalWall(roomGroup, hallW, springH + barrelR, wallMat, 0, 0, 0);
+            buildPortalWall(roomGroup, hallW, springH + barrelR, wallMat, 0, -length, 0);
+
+            roomObj.exitLocalPos.set(0, 0, -length);
+            roomObj.exitLocalYaw = 0;
+            roomObj.colliders.push({ type: 'box', minX: -2.75, maxX: 2.75, minZ: -length, maxZ: 0 });
+
+            buildDynamicCloset(roomObj, -2.75, -7.2, Math.PI / 2);
+            buildDynamicCloset(roomObj, 2.75, -14.8, -Math.PI / 2);
+            buildInteractiveDresser(roomObj, -2.85, -13.5, Math.PI / 2);
+            buildInteractiveDresser(roomObj, 2.85, -7.8, -Math.PI / 2);
+
+            [-6, -15].forEach(zPos => {
+                const pLight = new THREE.PointLight(isAbyss ? 0x0ea5e9 : 0xffedd5, isAbyss ? 0.8 : 1.2, 16);
+                pLight.position.set(0, springH + barrelR - 0.6, zPos);
+                roomGroup.add(pLight);
+                state.roomLights.push({ light: pLight, baseIntensity: pLight.intensity });
+            });
+        }
+
+        roomObj.exitWorldPos = localToWorld(roomObj, roomObj.exitLocalPos.x, 0, roomObj.exitLocalPos.z);
+        roomObj.exitWorldYaw = roomObj.worldYaw + roomObj.exitLocalYaw;
+
+        const currDoorText = isAbyss ? `${roomNum}` : String(roomNum).padStart(3, '0');
+        const nextDoorText = isAbyss ? (roomNum + 1 === 0 ? '000' : `${roomNum + 1}`) : String(roomNum + 1).padStart(3, '0');
+        const nextLabel = isAbyss ? (roomNum + 1 === 0 ? 'SURFACE' : `DEPTH ${roomNum + 1}`) : `DOOR ${nextDoorText}`;
+
+        roomObj.doorMesh = buildArchedDoorAssembly(
+            roomGroup,
+            currDoorText,
+            isAbyss,
+            roomObj.exitLocalPos.x,
+            roomObj.exitLocalPos.z,
+            roomObj.exitLocalYaw
+        );
+
+        const doorWorldInteractPos = localToWorld(
+            roomObj,
+            roomObj.exitLocalPos.x + Math.sin(roomObj.exitLocalYaw) * 0.75,
+            1.4,
+            roomObj.exitLocalPos.z + Math.cos(roomObj.exitLocalYaw) * 0.75
+        );
+        state.interactables.push({
+            roomNumber: roomNum,
+            type: 'door',
+            roomObj,
+            pos: doorWorldInteractPos,
+            label: `Open ${nextLabel} [E]`
+        });
+
+        state.activeRooms.push(roomObj);
+        return roomObj;
+    }
+
+    function activateRoomGameplay(roomObj) {
+        state.currentRoomObj = roomObj;
+        state.roomNumber = roomObj.roomNumber;
+        const isAbyss = state.mode === 'abyss';
+        const absRoom = Math.abs(roomObj.roomNumber);
+
+        scene.fog.color.setHex(isAbyss ? 0x03081a : 0x07070c);
+        scene.fog.density = isAbyss ? 0.038 : (state.difficulty === 'abyssal' ? 0.036 : 0.024);
+
+        state.activeEntities.forEach(ent => worldGroup.remove(ent.mesh));
+        state.activeEntities = [];
+        document.getElementById('entity-sign-banner').classList.add('hidden');
+
+        const questRoll = Math.random();
+        if (isAbyss) {
+            const orbGoal = 3;
+            state.quest = { type: 'abyss_orbs', completed: false, collected: 0, required: orbGoal, hasKey: false };
+            for (let i = 0; i < orbGoal + 1; i++) {
+                const wPos = localToWorld(roomObj, (Math.random() - 0.5) * 2.2, 1.15, -4.0 - i * 2.5);
+                spawnLightOrb(wPos);
+            }
+        } else if (absRoom > 1 && questRoll < 0.34) {
+            state.quest = { type: 'lever', completed: false, collected: 0, required: 1, hasKey: false };
+            const leverGroup = new THREE.Group();
+            leverGroup.position.set(-2.2, 1.35, -5.5);
+
+            const boxBase = new THREE.Mesh(
+                new THREE.BoxGeometry(0.32, 0.48, 0.22),
+                new THREE.MeshStandardMaterial({ color: 0x27272a, metalness: 0.8, roughness: 0.3 })
+            );
+            const leverArm = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.04, 0.04, 0.65, 12),
+                new THREE.MeshStandardMaterial({ color: 0xdc2626, emissive: 0x991b1b, metalness: 0.88, roughness: 0.2 })
+            );
+            leverArm.rotation.x = -0.65;
+            leverArm.position.set(0, 0.22, 0.12);
+            const handleBall = new THREE.Mesh(
+                new THREE.SphereGeometry(0.08, 16, 16),
+                new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xef4444, emissiveIntensity: 0.7 })
+            );
+            handleBall.position.set(0, 0.5, 0.28);
+
+            leverGroup.add(boxBase, leverArm, handleBall);
+            roomObj.group.add(leverGroup);
+
+            state.interactables.push({
+                roomNumber: roomObj.roomNumber,
+                type: 'lever',
+                mesh: handleBall,
+                pos: localToWorld(roomObj, -2.2, 1.75, -5.3),
+                label: 'Pull Power Lever [E]'
+            });
+        } else if (absRoom > 2 && questRoll < 0.62) {
+            state.quest = { type: 'key', completed: false, collected: 0, required: 1, hasKey: false };
+            const keyGroup = new THREE.Group();
+            keyGroup.position.set(0, 0.95, -6.5);
+
+            const ring = new THREE.Mesh(
+                new THREE.TorusGeometry(0.12, 0.035, 10, 20),
+                new THREE.MeshStandardMaterial({ color: 0xf59e0b, emissive: 0xd97706, metalness: 0.95, roughness: 0.15 })
+            );
+            ring.rotation.x = Math.PI / 2;
+            const shaft = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.028, 0.028, 0.36, 12),
+                new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.95, roughness: 0.15 })
+            );
+            shaft.rotation.z = Math.PI / 2;
+            shaft.position.set(0.22, 0, 0);
+            const teeth1 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.09, 0.028), new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.95 }));
+            teeth1.position.set(0.34, -0.05, 0);
+
+            keyGroup.add(ring, shaft, teeth1);
+            roomObj.group.add(keyGroup);
+
+            state.interactables.push({
+                roomNumber: roomObj.roomNumber,
+                type: 'key',
+                mesh: keyGroup,
+                pos: localToWorld(roomObj, 0, 0.95, -6.5),
+                label: 'Pick Up Ornate Brass Key [E]'
+            });
+        } else {
+            state.quest = { type: 'none', completed: true, collected: 0, required: 0, hasKey: false };
+        }
+
+        const diffChance = state.difficulty === 'normal' ? 0.36 : state.difficulty === 'nightmare' ? 0.55 : 0.72;
+        if (absRoom > 1 && Math.random() < diffChance) {
+            scheduleEntitySpawn(roomObj);
+        }
+
+        updateHUD();
+    }
+
+    function buildSeamlessChainFrom(startRoomNum) {
+        clearWorld();
+        const firstRoom = createRoomSegment(startRoomNum, new THREE.Vector3(0, 0, 0), 0);
+        createRoomSegment(startRoomNum + 1, firstRoom.exitWorldPos, firstRoom.exitWorldYaw);
+
+        playerPos.set(0, 1.68, -1.2);
+        playerRot.yaw = 0;
+        activateRoomGameplay(firstRoom);
+    }
+
+    function spawnLightOrb(worldPos) {
+        const orb = new THREE.Mesh(
+            new THREE.SphereGeometry(0.24, 16, 16),
+            new THREE.MeshBasicMaterial({ color: 0x38bdf8 })
+        );
+        orb.position.copy(worldPos);
+        const glow = new THREE.PointLight(0x38bdf8, 1.8, 6);
+        orb.add(glow);
+        worldGroup.add(orb);
+        state.pickups.push({ type: 'orb', mesh: orb });
+    }
+
+    function scheduleEntitySpawn(roomObj) {
+        const types = ['rusher', 'watcher', 'stalker'];
+        const chosen = types[Math.floor(Math.random() * types.length)];
+        const banner = document.getElementById('entity-sign-banner');
+
+        if (chosen === 'rusher') {
+            sfx.playWarningCue('rusher');
+            banner.textContent = '⚠️ THE LIGHTS ARE FLICKERING — HIDE IN A CLOSET NOW!';
+            banner.classList.remove('hidden');
+
+            setTimeout(() => {
+                if (!state.isPlaying || state.currentRoomObj !== roomObj) return;
+                const mesh = buildEntityModel('rusher');
+                const startWorld = localToWorld(roomObj, 0, 0, -0.8);
+                mesh.position.copy(startWorld);
+                mesh.rotation.y = roomObj.worldYaw + Math.PI;
+                worldGroup.add(mesh);
+                state.activeEntities.push({
+                    type: 'rusher',
+                    roomObj,
+                    mesh,
+                    localZ: -0.8,
+                    speed: state.difficulty === 'normal' ? 13 : 18
+                });
+            }, 2200);
+        } else if (chosen === 'watcher') {
+            sfx.playWarningCue('watcher');
+            banner.textContent = '👁️ WHISPERS IN THE DARK — DO NOT LOOK AT IT!';
+            banner.classList.remove('hidden');
+
+            const mesh = buildEntityModel('watcher');
+            mesh.position.copy(localToWorld(roomObj, (Math.random() - 0.5) * 2.4, 0, -10));
+            worldGroup.add(mesh);
+            state.activeEntities.push({
+                type: 'watcher',
+                mesh,
+                stareTime: 0,
+                life: 7.5
+            });
+        } else {
+            sfx.playWarningCue('stalker');
+            banner.textContent = '🔦 FOOTSTEPS BEHIND YOU — OVERCHARGE LIGHT [RMB] TO BURN IT!';
+            banner.classList.remove('hidden');
+
+            const mesh = buildEntityModel('stalker');
+            mesh.position.copy(localToWorld(roomObj, (Math.random() - 0.5) * 2.2, 0, -1.2));
+            worldGroup.add(mesh);
+            state.activeEntities.push({
+                type: 'stalker',
+                mesh,
+                hp: 100,
+                speed: state.difficulty === 'normal' ? 2.6 : 3.6
+            });
+        }
+    }
+
+    // ==================== 11. INPUT HANDLING (DESKTOP + MOBILE/TABLET TOUCH) ====================
+    const keys = {};
+    let isPointerLocked = false;
+    const touchMove = { active: false, id: null, startX: 0, startY: 0, dx: 0, dy: 0 };
+    const touchLook = { active: false, id: null, lastX: 0, lastY: 0 };
+
+    window.addEventListener('keydown', e => {
+        keys[e.code] = true;
+        if (!state.isPlaying) return;
+
+        if (e.code === 'KeyF') toggleFlashlight();
+        if (e.code === 'KeyE') triggerInteract();
+        if (e.code === 'Digit1') usePotion('speed');
+        if (e.code === 'Digit2') usePotion('invis');
+        if (e.code === 'Escape') pauseToMenu();
+    });
+
+    window.addEventListener('keyup', e => {
+        keys[e.code] = false;
+    });
+
+    canvas.addEventListener('mousedown', e => {
+        if (!state.isPlaying) return;
+        sfx.init();
+        if (!isPointerLocked && !isMobileMode && canvas.requestPointerLock) {
+            try { canvas.requestPointerLock(); } catch (err) {}
+        }
+        if (e.button === 2) state.combatBeam = true;
+        if (e.button === 0 && isPointerLocked) triggerInteract();
+    });
+
+    window.addEventListener('mouseup', e => {
+        if (e.button === 2) state.combatBeam = false;
+    });
+
+    window.addEventListener('contextmenu', e => e.preventDefault());
+
+    document.addEventListener('pointerlockchange', () => {
+        isPointerLocked = document.pointerLockElement === canvas;
+    });
+
+    window.addEventListener('mousemove', e => {
+        if (!state.isPlaying) return;
+        if (isPointerLocked || e.buttons === 1) {
+            const sens = 0.0022 * saveData.settings.sensitivity;
+            playerRot.yaw -= e.movementX * sens;
+            playerRot.pitch = Math.max(-1.42, Math.min(1.35, playerRot.pitch - e.movementY * sens));
+        }
+    });
+
+    const touchZone = document.getElementById('touch-move-zone');
+    const touchKnob = document.getElementById('touch-move-knob');
+    const touchLookZone = document.getElementById('touch-look-zone');
+
+    touchZone.addEventListener('touchstart', e => {
+        e.preventDefault();
+        const t = e.changedTouches[0];
+        touchMove.active = true;
+        touchMove.id = t.identifier;
+        touchMove.startX = t.clientX;
+        touchMove.startY = t.clientY;
+    }, { passive: false });
+
+    touchZone.addEventListener('touchmove', e => {
+        e.preventDefault();
+        for (let t of e.changedTouches) {
+            if (t.identifier === touchMove.id) {
+                const maxR = 42;
+                const rawX = t.clientX - touchMove.startX;
+                const rawY = t.clientY - touchMove.startY;
+                const dist = Math.min(maxR, Math.hypot(rawX, rawY));
+                const ang = Math.atan2(rawY, rawX);
+                touchMove.dx = (Math.cos(ang) * dist) / maxR;
+                touchMove.dy = (Math.sin(ang) * dist) / maxR;
+                touchKnob.style.transform = `translate(${Math.cos(ang) * dist}px, ${Math.sin(ang) * dist}px)`;
+            }
+        }
+    }, { passive: false });
+
+    touchZone.addEventListener('touchend', e => {
+        for (let t of e.changedTouches) {
+            if (t.identifier === touchMove.id) {
+                touchMove.active = false;
+                touchMove.dx = 0;
+                touchMove.dy = 0;
+                touchKnob.style.transform = 'translate(0px, 0px)';
+            }
+        }
+    });
+
+    function bindLookTouch(el) {
+        el.addEventListener('touchstart', e => {
+            if (!state.isPlaying) return;
+            const t = e.changedTouches[0];
+            if (!touchLook.active) {
+                touchLook.active = true;
+                touchLook.id = t.identifier;
+                touchLook.lastX = t.clientX;
+                touchLook.lastY = t.clientY;
+            }
+        }, { passive: true });
+
+        el.addEventListener('touchmove', e => {
+            if (!state.isPlaying) return;
+            for (let t of e.changedTouches) {
+                if (t.identifier === touchLook.id) {
+                    const sens = 0.0048 * saveData.settings.sensitivity;
+                    playerRot.yaw -= (t.clientX - touchLook.lastX) * sens;
+                    playerRot.pitch = Math.max(-1.42, Math.min(1.35, playerRot.pitch - (t.clientY - touchLook.lastY) * sens));
+                    touchLook.lastX = t.clientX;
+                    touchLook.lastY = t.clientY;
+                }
+            }
+        }, { passive: true });
+
+        el.addEventListener('touchend', e => {
+            for (let t of e.changedTouches) {
+                if (t.identifier === touchLook.id) touchLook.active = false;
+            }
+        });
+    }
+
+    bindLookTouch(canvas);
+    bindLookTouch(touchLookZone);
+
+    // ==================== 12. GAMEPLAY ACTIONS & PROGRESSION ====================
+    function launchExpedition() {
+        sfx.init();
+        menuBackdropGroup.visible = false;
+        playerRig.visible = true;
+        document.getElementById('main-menu').classList.add('hidden');
+        document.getElementById('gameover-modal').classList.add('hidden');
+        document.getElementById('game-hud').classList.remove('hidden');
+        applyDeviceModeUI();
+
+        state.isPlaying = true;
+        state.sessionCoins = 0;
+        const accBonusHp = saveData.equippedAccessory === 'crimson_band' ? 20 : 0;
+        state.maxHp = 100 + saveData.upgrades.vitality * 15 + accBonusHp;
+        state.hp = state.maxHp;
+
+        const accBonusStam = saveData.equippedAccessory === 'golden_cuff' ? 35 : 0;
+        state.maxStamina = 100 + saveData.upgrades.stamina * 20 + accBonusStam;
+        state.stamina = state.maxStamina;
+        state.battery = 100;
+        state.abyssLight = 100;
+        state.buffs = { speed: 0, invis: 0 };
+
+        if (state.mode === 'abyss') {
+            state.roomNumber = -100;
+            document.getElementById('abyss-overlay').style.opacity = '1';
+            document.getElementById('hud-abyss-meter').classList.remove('hidden');
+        } else {
+            state.roomNumber = 1;
+            document.getElementById('abyss-overlay').style.opacity = '0';
+            document.getElementById('hud-abyss-meter').classList.add('hidden');
+        }
+
+        updatePlayerEquipmentVisuals();
+        buildSeamlessChainFrom(state.roomNumber);
+
+        if (!isMobileMode && canvas.requestPointerLock) {
+            try { canvas.requestPointerLock(); } catch (err) {}
+        }
+    }
+
+    function pauseToMenu() {
+        state.isPlaying = false;
+        menuBackdropGroup.visible = true;
+        playerRig.visible = false;
+        if (document.pointerLockElement) document.exitPointerLock();
+        document.getElementById('game-hud').classList.add('hidden');
+        document.getElementById('main-menu').classList.remove('hidden');
+        refreshMenuUI();
+    }
+
+    function toggleFlashlight() {
+        state.flashlightOn = !state.flashlightOn;
+        sfx.playClick(state.flashlightOn ? 750 : 400);
+    }
+
+    function usePotion(type) {
+        if (!state.isPlaying) return;
+        if ((saveData.potions[type] || 0) <= 0) {
+            showToast(`No ${type === 'speed' ? 'Speed' : 'Invisibility'} Potions left!`, 'warning');
+            return;
+        }
+        saveData.potions[type]--;
+        persistSave();
+        sfx.playCoinOrOrb(true);
+
+        if (type === 'speed') {
+            state.buffs.speed = 15.0;
+            showToast('⚡ Adrenaline Surge! +65% Speed for 15s', 'success');
+        } else {
+            state.buffs.invis = 12.0;
+            showToast('👻 Spectral Cloak! Invisible to entities for 12s', 'success');
+        }
+        updateHUD();
+    }
+
+    function triggerInteract() {
+        if (!state.isPlaying) return;
+
+        if (state.isHiding) {
+            state.isHiding = false;
+            if (state.activeCloset) {
+                state.activeCloset.targetOpen = 1.35;
+                setTimeout(() => {
+                    if (state.activeCloset && !state.isHiding) state.activeCloset.targetOpen = 0;
+                }, 600);
+            }
+            playerPos.copy(state.preHidePos);
+            document.getElementById('hiding-banner').classList.add('hidden');
+            sfx.playDoorCreak();
+            return;
+        }
+
+        let closest = null;
+        let minDist = 2.65;
+        for (const item of state.interactables) {
+            const d = playerPos.distanceTo(item.pos);
+            if (d < minDist) {
+                minDist = d;
+                closest = item;
+            }
+        }
+        if (!closest) return;
+
+        if (closest.type === 'closet') {
+            state.isHiding = true;
+            state.activeCloset = closest.closetAnim;
+            closest.closetAnim.targetOpen = 1.35;
+            setTimeout(() => {
+                if (state.isHiding && state.activeCloset === closest.closetAnim) {
+                    closest.closetAnim.targetOpen = 0.08;
+                }
+            }, 350);
+            state.preHidePos.copy(playerPos);
+            playerPos.copy(closest.closetCenter);
+            document.getElementById('hiding-banner').classList.remove('hidden');
+            sfx.playDoorCreak();
+        } else if (closest.type === 'drawer') {
+            const dData = closest.drawerData;
+            if (dData.opened) return;
+            dData.opened = true;
+            sfx.playDrawerSlide();
+
+            if (dData.lootType === 'coins') {
+                const gain = 12 + Math.floor(Math.random() * 14);
+                saveData.coins += gain;
+                state.sessionCoins += gain;
+                persistSave();
+                sfx.playCoinOrOrb(false);
+                showToast(`🪙 Found +${gain} Soul Coins in drawer!`, 'success');
+                setTimeout(() => { if (dData.lootMesh) dData.lootMesh.visible = false; }, 350);
+            } else if (dData.lootType === 'battery') {
+                state.battery = Math.min(100, state.battery + 45);
+                sfx.playCoinOrOrb(true);
+                showToast('🔋 Found Lithium Battery Cell (+45% Charge)!', 'success');
+                setTimeout(() => { if (dData.lootMesh) dData.lootMesh.visible = false; }, 350);
+            } else if (dData.lootType === 'potion') {
+                const pKey = Math.random() > 0.5 ? 'speed' : 'invis';
+                saveData.potions[pKey]++;
+                persistSave();
+                sfx.playCoinOrOrb(true);
+                showToast(`🧪 Found a ${pKey === 'speed' ? 'Speed' : 'Invisibility'} Potion!`, 'success');
+                setTimeout(() => { if (dData.lootMesh) dData.lootMesh.visible = false; }, 350);
+            } else if (dData.lootType === 'mimic') {
+                sfx.playJumpscare();
+                document.getElementById('damage-overlay').style.opacity = '0.9';
+                setTimeout(() => { document.getElementById('damage-overlay').style.opacity = '0'; }, 450);
+                if (!adminState.godMode) {
+                    state.hp -= 24;
+                    if (state.hp <= 0) {
+                        triggerDeath('A Drawer Mimic latched onto your throat!', '🕷️');
+                        return;
+                    }
+                }
+                showToast('🕷️ AMBUSH MIMIC! -24 Vitality!', 'danger');
+                setTimeout(() => { if (dData.lootMesh) dData.lootMesh.visible = false; }, 350);
+            } else {
+                showToast('The wooden drawer is empty.', 'info');
+            }
+            updateHUD();
+        } else if (closest.type === 'lever') {
+            if (!state.quest.completed) {
+                state.quest.completed = true;
+                closest.mesh.material.color.setHex(0x22c55e);
+                closest.mesh.material.emissive.setHex(0x15803d);
+                sfx.playClick(820);
+                showToast('⚡ Power Restored! Exit door unlocked.', 'success');
+                updateHUD();
+            }
+        } else if (closest.type === 'key') {
+            if (!state.quest.hasKey) {
+                state.quest.hasKey = true;
+                state.quest.completed = true;
+                closest.mesh.visible = false;
+                state.interactables = state.interactables.filter(i => i !== closest);
+                sfx.playCoinOrOrb(false);
+                showToast('🔑 Collected Ornate Brass Key! Unlock the exit door.', 'success');
+                updateHUD();
+            }
+        } else if (closest.type === 'door') {
+            if (!state.quest.completed) {
+                sfx.playClick(220);
+                showToast('The door is sealed! Complete the room objective first.', 'warning');
+                return;
+            }
+            if (closest.roomObj && !closest.roomObj.doorOpen) {
+                closest.roomObj.doorOpen = true;
+                sfx.playDoorCreak();
+                showToast('Door swung open! Walk straight into the next room.', 'info');
+            }
+        }
+    }
+
+    // Called seamlessly when the player walks physically across the open doorway into the next room (NO TELEPORTS!)
+    function promoteToNextRoom() {
+        const diffMult = state.difficulty === 'normal' ? 1.0 : state.difficulty === 'nightmare' ? 2.0 : 3.5;
+        const accBonus = (saveData.equippedAccessory === 'abyss_gauntlet' || saveData.equippedAccessory === 'golden_cuff') ? 1.25 : 1.0;
+        const reward = Math.round((12 + Math.abs(state.roomNumber) * 0.4) * diffMult * accBonus);
+
+        saveData.coins += reward;
+        state.sessionCoins += reward;
+        sfx.playCoinOrOrb(false);
+
+        if (state.mode === 'corridor') {
+            if (state.roomNumber > saveData.bestRoom) saveData.bestRoom = state.roomNumber;
+
+            if (state.roomNumber >= 100) {
+                saveData.abyssUnlocked = true;
+                persistSave();
+                showToast('🌌 DOOR 100 CLEARED! DESCENDING INTO THE ABYSS (-100 TO 0)!', 'admin');
+                state.mode = 'abyss';
+                state.roomNumber = -100;
+                state.abyssLight = 100;
+                document.getElementById('abyss-overlay').style.opacity = '1';
+                document.getElementById('hud-abyss-meter').classList.remove('hidden');
+                buildSeamlessChainFrom(state.roomNumber);
+                return;
+            }
+        } else if (state.roomNumber + 1 >= 0) {
+            saveData.coins += 1000;
+            persistSave();
+            triggerVictory();
+            return;
+        }
+
+        // Prune rooms older than the immediately previous room so you can still look back through the doorway behind you!
+        while (state.activeRooms.length > 2) {
+            const oldRoom = state.activeRooms.shift();
+            worldGroup.remove(oldRoom.group);
+            state.interactables = state.interactables.filter(it => it.roomNumber !== oldRoom.roomNumber);
+        }
+
+        const nextRoomObj = state.activeRooms[state.activeRooms.length - 1];
+        activateRoomGameplay(nextRoomObj);
+
+        // Pre-generate the room AFTER nextRoomObj so opening its door reveals the real room beyond it!
+        createRoomSegment(nextRoomObj.roomNumber + 1, nextRoomObj.exitWorldPos, nextRoomObj.exitWorldYaw);
+        persistSave();
+    }
+
+    function triggerVictory() {
+        state.isPlaying = false;
+        if (document.pointerLockElement) document.exitPointerLock();
+        document.getElementById('game-hud').classList.add('hidden');
+        document.getElementById('gameover-modal').classList.remove('hidden');
+        document.getElementById('jumpscare-visual').textContent = '🌅';
+        document.getElementById('gameover-title').textContent = 'ESCAPED THE ABYSS!';
+        document.getElementById('gameover-title').className = 'font-horror text-4xl md:text-6xl font-extrabold text-emerald-400 tracking-wider mb-2';
+        document.getElementById('gameover-reason').textContent = 'You conquered all 100 Doors and climbed out of The Abyss from -100 to 0!';
+        document.getElementById('gameover-room').textContent = 'DEPTH 000';
+        document.getElementById('gameover-coins').textContent = `+${state.sessionCoins + 1000} 🪙`;
+    }
+
+    function triggerDeath(reason, icon = '👹') {
+        if (adminState.godMode || !state.isPlaying) return;
+        state.isPlaying = false;
+        sfx.playJumpscare();
+        if (document.pointerLockElement) document.exitPointerLock();
+
+        document.body.classList.add('jumpscare-active');
+        document.getElementById('damage-overlay').style.opacity = '1';
+
+        setTimeout(() => {
+            document.body.classList.remove('jumpscare-active');
+            document.getElementById('damage-overlay').style.opacity = '0';
+            document.getElementById('game-hud').classList.add('hidden');
+            document.getElementById('gameover-modal').classList.remove('hidden');
+
+            document.getElementById('jumpscare-visual').textContent = icon;
+            document.getElementById('gameover-title').textContent = 'YOU WERE CONSUMED';
+            document.getElementById('gameover-title').className = 'font-horror text-4xl md:text-6xl font-extrabold text-red-500 tracking-wider mb-2';
+            document.getElementById('gameover-reason').textContent = reason;
+            document.getElementById('gameover-room').textContent = state.mode === 'abyss' ? `Depth ${state.roomNumber}` : `Door ${String(state.roomNumber).padStart(3, '0')}`;
+            document.getElementById('gameover-coins').textContent = `+${state.sessionCoins} 🪙`;
+            persistSave();
+        }, 780);
+    }
+
+    function restartSameMode() {
+        launchExpedition();
+    }
+
+    function returnToMenuFromDeath() {
+        document.getElementById('gameover-modal').classList.add('hidden');
+        menuBackdropGroup.visible = true;
+        playerRig.visible = false;
+        document.getElementById('main-menu').classList.remove('hidden');
+        refreshMenuUI();
+    }
+
+    // ==================== 13. HUD UPDATE LOOP ====================
+    function updateHUD() {
+        const isAbyss = state.mode === 'abyss';
+        document.getElementById('hud-zone-label').textContent = isAbyss ? 'THE ABYSS (COLLECT LIGHT)' : 'THE CORRIDOR';
+        document.getElementById('hud-room-number').textContent = isAbyss
+            ? `DEPTH ${state.roomNumber}`
+            : `DOOR ${String(state.roomNumber).padStart(3, '0')}`;
+
+        let qText = 'Proceed through the exit door.';
+        if (state.quest.type === 'lever' && !state.quest.completed) {
+            qText = 'Find and pull the Red Power Lever on the wall.';
+        } else if (state.quest.type === 'key' && !state.quest.completed) {
+            qText = 'Find the Brass Key on a dresser to unlock the door.';
+        } else if (state.quest.type === 'abyss_orbs' && !state.quest.completed) {
+            qText = `Gather Abyssal Light Orbs (${state.quest.collected}/${state.quest.required}) to unseal exit.`;
+        }
+        document.getElementById('hud-quest-text').textContent = qText;
+
+        document.getElementById('hud-coins').textContent = saveData.coins.toLocaleString();
+        document.getElementById('hud-hp-text').textContent = `${Math.ceil(state.hp)} / ${state.maxHp}`;
+        document.getElementById('hud-hp-bar').style.width = `${Math.max(0, (state.hp / state.maxHp) * 100)}%`;
+
+        document.getElementById('hud-stam-text').textContent = `${Math.round((state.stamina / state.maxStamina) * 100)}%`;
+        document.getElementById('hud-stam-bar').style.width = `${(state.stamina / state.maxStamina) * 100}%`;
+
+        document.getElementById('hud-bat-text').textContent = `${Math.round(state.battery)}%`;
+        document.getElementById('hud-bat-bar').style.width = `${state.battery}%`;
+
+        if (isAbyss) {
+            document.getElementById('hud-abyss-text').textContent = `${Math.round(state.abyssLight)}%`;
+            document.getElementById('hud-abyss-bar').style.width = `${state.abyssLight}%`;
+        }
+
+        document.getElementById('hud-speed-count').textContent = `Owned: ${saveData.potions.speed || 0}`;
+        document.getElementById('hud-invis-count').textContent = `Owned: ${saveData.potions.invis || 0}`;
+
+        const buffsBar = document.getElementById('active-buffs-bar');
+        buffsBar.innerHTML = '';
+        if (state.buffs.speed > 0) {
+            buffsBar.innerHTML += `<span class="px-2.5 py-1 rounded-lg bg-emerald-950/90 border border-emerald-500/50 text-emerald-300">⚡ SPEED ${state.buffs.speed.toFixed(1)}s</span>`;
+        }
+        if (state.buffs.invis > 0) {
+            buffsBar.innerHTML += `<span class="px-2.5 py-1 rounded-lg bg-indigo-950/90 border border-indigo-500/50 text-indigo-300">👻 INVIS ${state.buffs.invis.toFixed(1)}s</span>`;
+        }
+    }
+
+    // ==================== 14. MAIN REAL-TIME SIMULATION & ANIMATION LOOP ====================
+    const clock = new THREE.Clock();
+
+    function animate() {
+        requestAnimationFrame(animate);
+        const dt = Math.min(clock.getDelta(), 0.05);
+        const elapsed = clock.getElapsedTime();
+
+        sfx.updateWordlessVocalChoir();
+
+        if (!state.isPlaying) {
+            camera.position.set(
+                Math.sin(elapsed * 0.25) * 1.45,
+                1.78 + Math.sin(elapsed * 0.55) * 0.06,
+                1.2 + Math.cos(elapsed * 0.2) * 0.4
+            );
+            camera.rotation.set(-0.02, Math.sin(elapsed * 0.16) * 0.12, 0);
+
+            menuTorches.forEach(t => {
+                const flicker = Math.sin(elapsed * 9 + t.phase) * 0.25 + Math.cos(elapsed * 15 + t.phase) * 0.12;
+                t.light.intensity = 2.0 + flicker;
+                t.flame.scale.setScalar(0.92 + flicker * 0.2);
+            });
+            menuDustParticles.forEach(p => {
+                p.mesh.position.y += p.speed * dt;
+                p.mesh.position.x += Math.sin(elapsed + p.offset) * 0.002;
+                if (p.mesh.position.y > 4.6) p.mesh.position.y = 0.35;
+            });
+
+            renderer.render(scene, camera);
+            return;
+        }
+
+        // 1. Buffs & Organic Ambient Creaks
+        if (state.buffs.speed > 0) state.buffs.speed = Math.max(0, state.buffs.speed - dt);
+        if (state.buffs.invis > 0) state.buffs.invis = Math.max(0, state.buffs.invis - dt);
+        sfx.playRandomCreak();
+
+        // 2. Movement Input & Seamless Multi-Room Collision
+        let moveForward = 0;
+        let moveRight = 0;
+        if (keys['KeyW'] || keys['ArrowUp']) moveForward += 1;
+        if (keys['KeyS'] || keys['ArrowDown']) moveForward -= 1;
+        if (keys['KeyD'] || keys['ArrowRight']) moveRight += 1;
+        if (keys['KeyA'] || keys['ArrowLeft']) moveRight -= 1;
+
+        if (touchMove.active) {
+            moveForward -= touchMove.dy;
+            moveRight += touchMove.dx;
+        }
+
+        const isMoving = Math.hypot(moveForward, moveRight) > 0.05;
+        const wantsSprint = (keys['ShiftLeft'] || keys['ShiftRight'] || mobileSprint) && isMoving && (state.stamina > 2 || adminState.infStaminaBattery);
+
+        if (wantsSprint && !adminState.infStaminaBattery) {
+            state.stamina = Math.max(0, state.stamina - 22 * dt);
+        } else {
+            const regen = 14 * (1 + saveData.upgrades.stamina * 0.2);
+            state.stamina = Math.min(state.maxStamina, state.stamina + regen * dt);
+        }
+
+        let baseSpeed = 4.3 * (1 + saveData.upgrades.speed * 0.08);
+        if (saveData.equippedAccessory === 'chrono_watch') baseSpeed *= 1.1;
+        if (state.buffs.speed > 0) baseSpeed *= 1.65;
+        if (adminState.superSpeed) baseSpeed *= 3.0;
+        const speed = wantsSprint ? baseSpeed * 1.55 : baseSpeed;
+
+        function isPointWalkable(worldPt) {
+            for (const rObj of state.activeRooms) {
+                const localPt = worldPt.clone().sub(rObj.worldOrigin).applyAxisAngle(new THREE.Vector3(0, 1, 0), -rObj.worldYaw);
+                for (const col of rObj.colliders) {
+                    if (col.type === 'box') {
+                        if (localPt.x >= col.minX && localPt.x <= col.maxX && localPt.z >= col.minZ && localPt.z <= col.maxZ) {
+                            return true;
+                        }
+                    } else if (col.type === 'circle') {
+                        const distFromCenter = Math.hypot(localPt.x - col.cx, localPt.z - col.cz);
+                        const inPortals = Math.abs(localPt.x) <= col.portalHalfW && localPt.z <= 0.4 && localPt.z >= -14.6;
+                        if (distFromCenter <= col.maxR || inPortals) {
+                            return true;
+                        }
+                    }
+                }
+                if (rObj.doorOpen) {
+                    const doorLocal = localPt.clone().sub(rObj.exitLocalPos).applyAxisAngle(new THREE.Vector3(0, 1, 0), -rObj.exitLocalYaw);
+                    if (Math.abs(doorLocal.x) < 0.85 && Math.abs(doorLocal.z) < 1.35) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        if (!state.isHiding) {
+            const forwardVec = new THREE.Vector3(-Math.sin(playerRot.yaw), 0, -Math.cos(playerRot.yaw));
+            const rightVec = new THREE.Vector3(Math.cos(playerRot.yaw), 0, -Math.sin(playerRot.yaw));
+
+            if (isMoving) {
+                const moveDir = new THREE.Vector3()
+                    .addScaledVector(forwardVec, moveForward)
+                    .addScaledVector(rightVec, moveRight)
+                    .normalize();
+
+                const candidateX = playerPos.clone().add(new THREE.Vector3(moveDir.x * speed * dt, 0, 0));
+                const candidateZ = playerPos.clone().add(new THREE.Vector3(0, 0, moveDir.z * speed * dt));
+
+                if (adminState.flyMode || isPointWalkable(candidateX)) {
+                    playerPos.x = candidateX.x;
+                }
+                if (adminState.flyMode || isPointWalkable(candidateZ)) {
+                    playerPos.z = candidateZ.z;
+                }
+
+                state.stepTimer += dt * (wantsSprint ? 13 : 8.5);
+                if (state.stepTimer >= Math.PI) {
+                    state.stepTimer = 0;
+                    sfx.playFootstep(wantsSprint);
+                }
+            }
+
+            if (adminState.flyMode) {
+                if (keys['Space']) playerPos.y += 5.5 * dt;
+                if (keys['KeyC']) playerPos.y -= 5.5 * dt;
+            } else {
+                const headBob = isMoving ? Math.sin(state.stepTimer * 2) * (wantsSprint ? 0.055 : 0.03) : 0;
+                playerPos.y = 1.68 + headBob;
+            }
+
+            if (state.currentRoomObj && state.currentRoomObj.doorOpen) {
+                const exitRel = playerPos.clone()
+                    .sub(state.currentRoomObj.exitWorldPos)
+                    .applyAxisAngle(new THREE.Vector3(0, 1, 0), -state.currentRoomObj.exitWorldYaw);
+                if (exitRel.z < -0.55) {
+                    promoteToNextRoom();
+                }
+            }
+        }
+
+        // 3. Camera & Realistic 3D Player Body Synchronization
+        camera.position.copy(playerPos);
+        camera.rotation.y = playerRot.yaw;
+        camera.rotation.x = playerRot.pitch;
+
+        playerRig.position.set(playerPos.x, playerPos.y - 1.68, playerPos.z);
+        playerRig.rotation.y = playerRot.yaw;
+
+        if (bodyParts.leftLeg && bodyParts.rightLeg) {
+            const swing = isMoving && !state.isHiding ? Math.sin(state.stepTimer * 2) * 0.55 : 0;
+            bodyParts.leftLeg.hipPivot.rotation.x = swing;
+            bodyParts.rightLeg.hipPivot.rotation.x = -swing;
+            bodyParts.leftLeg.kneePivot.rotation.x = Math.max(0, -swing * 0.7);
+            bodyParts.rightLeg.kneePivot.rotation.x = Math.max(0, swing * 0.7);
+
+            if (bodyParts.rightArm && bodyParts.leftArm) {
+                bodyParts.rightArm.shoulderPivot.rotation.x = -0.35 + playerRot.pitch * 0.45 + Math.cos(state.stepTimer * 2) * 0.04;
+                bodyParts.leftArm.shoulderPivot.rotation.x = -0.15 - swing * 0.35;
+            }
+        }
+
+        // 4. Flashlight & Combat Overcharge Beam
+        const flSpec = FLASHLIGHTS.find(f => f.id === saveData.equippedFlashlight) || FLASHLIGHTS[0];
+        if (state.flashlightOn && (state.battery > 0 || adminState.infStaminaBattery)) {
+            const drainMult = (state.combatBeam ? 4.2 : 1.0) * flSpec.drain * Math.pow(0.85, saveData.upgrades.battery);
+            if (!adminState.infStaminaBattery) {
+                state.battery = Math.max(0, state.battery - 2.2 * drainMult * dt);
+            }
+            flashSpot.intensity = state.combatBeam ? flSpec.intensity * 2.1 : flSpec.intensity;
+            flashSpot.angle = state.combatBeam ? Math.PI / 7.5 : Math.PI / 5.2;
+        } else {
+            flashSpot.intensity = 0;
+            if (!adminState.infStaminaBattery) {
+                state.battery = Math.min(100, state.battery + 3.5 * dt);
+            }
+        }
+
+        const lookDir = new THREE.Vector3(0, 0, -1).applyEuler(camera.rotation);
+        flashSpot.position.copy(camera.position).addScaledVector(lookDir, 0.25);
+        flashSpot.target.position.copy(camera.position).addScaledVector(lookDir, 10);
+
+        // 5. The Abyss Light Decay System (-100 to 0)
+        if (state.mode === 'abyss' && !adminState.infStaminaBattery && !adminState.godMode) {
+            const abyssResist = (saveData.equippedFlashlight === 'uv_purifier' ? 0.75 : 1.0) * (saveData.equippedAccessory === 'abyss_gauntlet' ? 0.8 : 1.0);
+            state.abyssLight = Math.max(0, state.abyssLight - 5.2 * abyssResist * dt);
+            if (state.abyssLight <= 0) {
+                triggerDeath('The Abyss swallowed your soul light. Collect Cyan Orbs to survive!', '🌌');
+            }
+        }
+
+        // 6. Pickups (Abyssal Light Orbs)
+        for (let i = state.pickups.length - 1; i >= 0; i--) {
+            const p = state.pickups[i];
+            p.mesh.rotation.y += 2.4 * dt;
+            if (p.mesh.position.distanceTo(playerPos) < 1.55) {
+                worldGroup.remove(p.mesh);
+                state.pickups.splice(i, 1);
+
+                if (p.type === 'orb') {
+                    state.abyssLight = Math.min(100, state.abyssLight + 42);
+                    sfx.playCoinOrOrb(true);
+                    if (state.quest.type === 'abyss_orbs' && !state.quest.completed) {
+                        state.quest.collected++;
+                        if (state.quest.collected >= state.quest.required) {
+                            state.quest.completed = true;
+                            showToast('✨ Enough Abyssal Light gathered! Exit unsealed.', 'success');
+                        }
+                    }
+                }
+            }
+        }
+
+        // 7. Interactive Hover Prompt
+        let hoverLabel = null;
+        if (!state.isHiding) {
+            for (const item of state.interactables) {
+                if (item.type === 'drawer' && item.drawerData.opened) continue;
+                if (playerPos.distanceTo(item.pos) < 2.55) {
+                    hoverLabel = item.label;
+                    break;
+                }
+            }
+        }
+        const promptEl = document.getElementById('interact-prompt');
+        if (hoverLabel) {
+            promptEl.textContent = hoverLabel;
+            promptEl.classList.remove('hidden');
+        } else {
+            promptEl.classList.add('hidden');
+        }
+
+        // 8. Smooth Hinged Door, Closet & Sliding Drawer Animations
+        for (const rObj of state.activeRooms) {
+            if (rObj.doorOpen && rObj.doorMesh) {
+                rObj.doorMesh.rotation.y = Math.min(Math.PI * 0.56, rObj.doorMesh.rotation.y + 3.4 * dt);
+            }
+        }
+
+        for (const cl of state.animatedClosets) {
+            cl.openAmount += (cl.targetOpen - cl.openAmount) * Math.min(1, 10 * dt);
+            cl.leftDoorPivot.rotation.y = -cl.openAmount;
+            cl.rightDoorPivot.rotation.y = cl.openAmount;
+        }
+
+        for (const dr of state.animatedDrawers) {
+            if (dr.opened && dr.slideAmount < 0.34) {
+                dr.slideAmount = Math.min(0.34, dr.slideAmount + 1.4 * dt);
+                dr.drawerPivot.position.z = 0.31 + dr.slideAmount;
+            }
+        }
+
+        // 9. Active 3D Entities AI, Flickering Lights & Combat
+        const isInvisible = state.buffs.invis > 0 || state.isHiding || adminState.godMode;
+
+        for (let i = state.activeEntities.length - 1; i >= 0; i--) {
+            const ent = state.activeEntities[i];
+
+            if (ent.type === 'rusher') {
+                state.roomLights.forEach(rl => {
+                    rl.light.intensity = Math.random() > 0.45 ? rl.baseIntensity * 1.6 : 0.05;
+                });
+
+                ent.localZ -= ent.speed * dt;
+                ent.mesh.position.copy(localToWorld(ent.roomObj, 0, 0, ent.localZ));
+                ent.mesh.userData.head.rotation.z = Math.sin(elapsed * 28) * 0.22;
+                ent.mesh.userData.jaw.rotation.x = 0.25 + Math.abs(Math.sin(elapsed * 22)) * 0.45;
+
+                if (!isInvisible && ent.mesh.position.distanceTo(new THREE.Vector3(playerPos.x, 1.2, playerPos.z)) < 1.65) {
+                    triggerDeath('The Rusher tore through the corridor. Hide in a closet when lights flicker!', '👹');
+                }
+
+                if (ent.localZ < -24) {
+                    worldGroup.remove(ent.mesh);
+                    state.activeEntities.splice(i, 1);
+                    state.roomLights.forEach(rl => rl.light.intensity = rl.baseIntensity);
+                    document.getElementById('entity-sign-banner').classList.add('hidden');
+                }
+            } else if (ent.type === 'watcher') {
+                ent.life -= dt;
+                ent.mesh.lookAt(playerPos.x, 0, playerPos.z);
+                ent.mesh.position.y = Math.sin(elapsed * 3.5) * 0.12;
+
+                const toEnt = new THREE.Vector3().subVectors(ent.mesh.position, playerPos).setY(0).normalize();
+                const camFlat = lookDir.clone().setY(0).normalize();
+                const dot = toEnt.dot(camFlat);
+
+                if (dot > 0.72 && !isInvisible) {
+                    ent.stareTime += dt;
+                    document.getElementById('damage-overlay').style.opacity = Math.min(0.85, ent.stareTime * 0.7).toString();
+                    if (ent.stareTime > 1.35) {
+                        triggerDeath('You stared into The Watcher’s eyes. Look away when you hear whispers!', '👁️');
+                    }
+                } else {
+                    ent.stareTime = Math.max(0, ent.stareTime - dt);
+                    document.getElementById('damage-overlay').style.opacity = '0';
+                }
+
+                if (ent.life <= 0) {
+                    worldGroup.remove(ent.mesh);
+                    state.activeEntities.splice(i, 1);
+                    document.getElementById('damage-overlay').style.opacity = '0';
+                    document.getElementById('entity-sign-banner').classList.add('hidden');
+                }
+            } else if (ent.type === 'stalker') {
+                const targetPos = new THREE.Vector3(playerPos.x, 0, playerPos.z);
+                const dir = new THREE.Vector3().subVectors(targetPos, ent.mesh.position);
+                const dist = dir.length();
+
+                if (!isInvisible && dist > 0.8) {
+                    dir.normalize();
+                    ent.mesh.position.addScaledVector(dir, ent.speed * dt);
+                    ent.mesh.lookAt(targetPos);
+
+                    const walkCycle = elapsed * 9;
+                    ent.mesh.userData.leftLeg.rotation.x = Math.sin(walkCycle) * 0.6;
+                    ent.mesh.userData.rightLeg.rotation.x = -Math.sin(walkCycle) * 0.6;
+                    ent.mesh.userData.leftArm.rotation.x = -0.42 - Math.sin(walkCycle) * 0.4;
+                    ent.mesh.userData.rightArm.rotation.x = -0.42 + Math.sin(walkCycle) * 0.4;
+                }
+
+                const toStalker = new THREE.Vector3().subVectors(ent.mesh.position, playerPos).normalize();
+                if (state.flashlightOn && state.battery > 0 && toStalker.dot(lookDir) > 0.78 && dist < flSpec.range) {
+                    const burnDmg = (state.combatBeam ? 68 : 22) * flSpec.burnPower * dt;
+                    ent.hp -= burnDmg;
+                    ent.mesh.position.x += (Math.random() - 0.5) * 0.08;
+                    if (ent.hp <= 0) {
+                        worldGroup.remove(ent.mesh);
+                        state.activeEntities.splice(i, 1);
+                        saveData.coins += 25;
+                        state.sessionCoins += 25;
+                        sfx.playCoinOrOrb(true);
+                        document.getElementById('entity-sign-banner').classList.add('hidden');
+                        showToast('🔥 Stalker banished with light! +25 Coins', 'success');
+                        continue;
+                    }
+                }
+
+                if (!isInvisible && dist < 1.25) {
+                    state.hp -= 45 * dt;
+                    document.getElementById('damage-overlay').style.opacity = '0.75';
+                    if (state.hp <= 0) {
+                        triggerDeath('The Stalker ambushed you from behind. Turn and burn it with your flashlight!', '🐺');
+                    }
+                } else {
+                    document.getElementById('damage-overlay').style.opacity = '0';
+                }
+            }
+        }
+
+        updateHUD();
+        renderer.render(scene, camera);
+    }
+
+    // Responsive Window Resize
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // Unlock Web Audio on first user interaction anywhere on the page
+    ['pointerdown', 'keydown', 'touchstart'].forEach(evt => {
+        window.addEventListener(evt, () => sfx.init(), { once: true });
+    });
+
+    // Boot Sequence
+    window.onload = function () {
+        playerRig.visible = false;
+        detectDeviceMode();
+        refreshMenuUI();
+        animate();
+    };
+    </script>
+</body>
+</html>
