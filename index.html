@@ -67,6 +67,15 @@
                 box-shadow: 0 0 34px rgba(239, 68, 68, 0.55), inset 0 0 20px rgba(239, 68, 68, 0.3);
             }
         }
+        @keyframes strobeFlash {
+            0%, 100% { background-color: rgba(185, 28, 28, 0.92); }
+            25% { background-color: rgba(255, 255, 255, 0.95); }
+            50% { background-color: rgba(10, 0, 0, 0.96); }
+            75% { background-color: rgba(220, 38, 38, 0.94); }
+        }
+        .jumpscare-strobe {
+            animation: strobeFlash 0.09s infinite, violentShake 0.1s infinite;
+        }
         @keyframes shimmerSweep {
             0% { transform: translateX(-140%) skewX(-20deg); }
             100% { transform: translateX(260%) skewX(-20deg); }
@@ -418,6 +427,7 @@
                 </div>
                 <div class="flex gap-2 justify-end">
                     <button id="btn-mobile-sprint" ontouchstart="mobileSprint=true" ontouchend="mobileSprint=false" class="px-3.5 py-3 rounded-xl bg-emerald-900/85 border border-emerald-400/40 text-emerald-100 font-bold text-xs shadow-lg">SPRINT</button>
+                    <button id="btn-mobile-crouch" ontouchstart="toggleCrouch()" class="px-3.5 py-3 rounded-xl bg-indigo-900/85 border border-indigo-400/40 text-indigo-100 font-bold text-xs shadow-lg">CROUCH</button>
                     <button ontouchstart="triggerInteract()" class="px-4 py-3 rounded-xl bg-amber-600/90 border border-amber-300/40 text-white font-bold text-xs shadow-lg">INTERACT</button>
                 </div>
                 <div class="flex gap-2 justify-end">
@@ -426,6 +436,31 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- Library Cipher Keypad Modal -->
+    <div id="cipher-modal" class="hidden fixed inset-0 z-40 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="bg-zinc-950 border-2 border-amber-500/60 rounded-3xl w-full max-w-sm p-6 text-center shadow-2xl">
+            <div class="text-xs uppercase tracking-widest text-amber-400 font-bold mb-1">ANCIENT LIBRARY LOCK</div>
+            <h3 class="font-horror text-xl font-bold text-white mb-2">ENTER 4-DIGIT BOOK CODE</h3>
+            <p id="cipher-hint-text" class="text-xs text-zinc-400 mb-4">Find glowing numbered tomes on the bookshelves and enter them in order (I → IV).</p>
+            <input id="cipher-input" type="text" maxlength="4" placeholder="____" class="w-full text-center tracking-[0.5em] text-2xl font-mono-code font-bold py-3 rounded-xl bg-zinc-900 border border-amber-500/50 text-amber-300 mb-4 focus:outline-none">
+            <div class="flex gap-2">
+                <button onclick="submitLibraryCipher()" class="flex-1 py-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs">UNLOCK EXIT</button>
+                <button onclick="closeCipherModal()" class="px-4 py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold text-xs">CLOSE</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Abyss-to-Magma Collapse Cutscene Overlay -->
+    <div id="cutscene-overlay" class="hidden fixed inset-0 z-50 bg-black flex flex-col items-center justify-center p-6 text-center transition-opacity duration-700">
+        <div id="cutscene-icon" class="text-7xl md:text-8xl mb-4 animate-bounce">🌋</div>
+        <h2 id="cutscene-title" class="font-horror text-3xl md:text-5xl font-extrabold text-orange-400 tracking-wider mb-3">
+            THE THRESHOLD SHATTERS!
+        </h2>
+        <p id="cutscene-desc" class="text-zinc-200 text-sm md:text-lg max-w-xl leading-relaxed">
+            As you step across Door 000, the ancient stone floor fractures beneath your boots—plunging you into THE MAGMA DEPTHS!
+        </p>
     </div>
 
     <!-- ==================== 3. SHOP MODAL (ARMORY, CRATES & UPGRADES) ==================== -->
@@ -603,6 +638,23 @@
                         <div class="text-xs font-bold text-red-300">💀 Banish Entities</div>
                         <div class="text-[11px] text-zinc-400 mt-0.5">Despawn active monsters</div>
                     </button>
+
+                    <button onclick="toggleAdminFlag('explorerMode')" id="adm-explorerMode" class="p-3.5 rounded-2xl border border-zinc-800 bg-zinc-900 text-left transition sm:col-span-3">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold text-emerald-300">🧭 Explorer Mode (Rooms Only)</span>
+                            <span class="text-[10px] font-mono-code text-zinc-400">PEACEFUL TOUR</span>
+                        </div>
+                        <div class="text-[11px] text-zinc-400 mt-0.5">Removes all monsters, quests, traps, and hazards—only pure architectural rooms & unlocked doors.</div>
+                    </button>
+                </div>
+
+                <!-- Admin Walkspeed Slider -->
+                <div class="p-3.5 rounded-2xl bg-zinc-900/90 border border-purple-500/30">
+                    <div class="flex justify-between text-xs font-bold mb-1.5">
+                        <span class="text-purple-300 uppercase tracking-wider">🏃 Admin Walkspeed Control</span>
+                        <span id="adm-walkspeed-val" class="text-white font-mono-code">1.0x</span>
+                    </div>
+                    <input id="adm-walkspeed-slider" type="range" min="0.5" max="10.0" step="0.5" value="1.0" oninput="setAdminWalkspeed(this.value)" class="w-full accent-purple-500">
                 </div>
 
                 <div class="pt-3 border-t border-zinc-800">
@@ -630,9 +682,11 @@
                             🚪 Warp to Door 99
                         </button>
                         <button onclick="adminStartAbyss()" class="px-4 py-2.5 rounded-xl bg-sky-900/60 hover:bg-sky-800 text-sky-100 text-xs font-bold">
-                            🌌 Warp to Abyss (-100)
-                        </button>
-                    </div>
+                        🌌 Warp to Abyss (-100)
+                    </button>
+                    <button onclick="adminStartMagma()" class="px-4 py-2.5 rounded-xl bg-orange-900/60 hover:bg-orange-800 text-orange-100 text-xs font-bold">
+                        🌋 Warp to Magma Depths
+                    </button>
                 </div>
             </div>
         </div>
@@ -1213,7 +1267,9 @@
         flyMode: false,
         infStaminaBattery: false,
         superSpeed: false,
-        fullBright: false
+        fullBright: false,
+        explorerMode: false,
+        walkspeedMult: 1.0
     };
 
     const state = {
@@ -1230,6 +1286,8 @@
         flashlightOn: true,
         combatBeam: false,
         abyssLight: 100,
+        magmaHeat: 0,
+        isCrouching: false,
         isHiding: false,
         activeCloset: null,
         preHidePos: new THREE.Vector3(),
@@ -1239,7 +1297,9 @@
             completed: true,
             collected: 0,
             required: 0,
-            hasKey: false
+            hasKey: false,
+            cipherCode: '',
+            foundBooks: []
         },
         activeEntities: [],
         interactables: [],
@@ -1248,6 +1308,7 @@
         animatedClosets: [],
         animatedDrawers: [],
         activeRooms: [],
+        prebuiltBlueprints: {},
         currentRoomObj: null,
         stepTimer: 0
     };
@@ -1630,17 +1691,29 @@
         if (flag === 'fullBright') {
             ambientLight.intensity = adminState.fullBright ? 2.4 : 0.36;
         }
+        if (flag === 'explorerMode' && adminState.explorerMode) {
+            adminBanishEntities();
+            state.quest = { type: 'none', completed: true, collected: 0, required: 0, hasKey: false };
+            updateHUD();
+        }
         showToast(`${flag}: ${adminState[flag] ? 'ENABLED' : 'DISABLED'}`, 'admin');
+    }
+
+    function setAdminWalkspeed(val) {
+        adminState.walkspeedMult = parseFloat(val);
+        const label = document.getElementById('adm-walkspeed-val');
+        if (label) label.textContent = `${adminState.walkspeedMult.toFixed(1)}x`;
     }
 
     function updateAdminUI() {
         Object.keys(adminState).forEach(key => {
+            if (typeof adminState[key] !== 'boolean') return;
             const btn = document.getElementById(`adm-${key}`);
             if (!btn) return;
             if (adminState[key]) {
-                btn.className = 'p-3.5 rounded-2xl border-2 border-purple-400 bg-purple-900/40 text-left transition shadow-lg';
+                btn.className = `p-3.5 rounded-2xl border-2 border-purple-400 bg-purple-900/40 text-left transition shadow-lg ${key === 'explorerMode' ? 'sm:col-span-3' : ''}`;
             } else {
-                btn.className = 'p-3.5 rounded-2xl border border-zinc-800 bg-zinc-900 text-left transition';
+                btn.className = `p-3.5 rounded-2xl border border-zinc-800 bg-zinc-900 text-left transition ${key === 'explorerMode' ? 'sm:col-span-3' : ''}`;
             }
         });
     }
@@ -1715,6 +1788,15 @@
         state.mode = 'abyss';
         launchExpedition();
         showToast('Descended into The Abyss (-100)!', 'admin');
+    }
+
+    function adminStartMagma() {
+        saveData.abyssUnlocked = true;
+        persistSave();
+        closeModal('admin-modal');
+        state.mode = 'magma';
+        launchExpedition();
+        showToast('Plunged into The Magma Depths!', 'admin');
     }
 
     // ==================== 6. THREE.JS 3D SCENE, NON-REPEATING ORGANIC TEXTURES & GRAND LOBBY ====================
@@ -1889,30 +1971,56 @@
     };
 
     function createAnatomicalPlayerBody() {
-        const skinMat = new THREE.MeshStandardMaterial({ color: 0xc99678, roughness: 0.58, metalness: 0.04 });
-        const jacketMat = new THREE.MeshStandardMaterial({ color: 0x1e242b, roughness: 0.78, metalness: 0.08 });
-        const shirtMat = new THREE.MeshStandardMaterial({ color: 0x333a45, roughness: 0.85 });
-        const pantsMat = new THREE.MeshStandardMaterial({ color: 0x16181d, roughness: 0.82 });
-        const bootMat = new THREE.MeshStandardMaterial({ color: 0x0d0d10, roughness: 0.45, metalness: 0.15 });
+        const skinMat = new THREE.MeshStandardMaterial({ color: 0xc99678, roughness: 0.52, metalness: 0.04 });
+        const jacketMat = new THREE.MeshStandardMaterial({ color: 0x1c2128, roughness: 0.72, metalness: 0.1 });
+        const collarMat = new THREE.MeshStandardMaterial({ color: 0x111418, roughness: 0.65 });
+        const shirtMat = new THREE.MeshStandardMaterial({ color: 0x374151, roughness: 0.85 });
+        const beltMat = new THREE.MeshStandardMaterial({ color: 0x291a10, roughness: 0.45, metalness: 0.3 });
+        const buckleMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.25, metalness: 0.88 });
+        const pantsMat = new THREE.MeshStandardMaterial({ color: 0x151820, roughness: 0.8 });
+        const bootMat = new THREE.MeshStandardMaterial({ color: 0x0b0c0e, roughness: 0.38, metalness: 0.18 });
 
         const torsoGroup = new THREE.Group();
         torsoGroup.position.set(0, 1.12, 0.04);
 
-        const chest = new THREE.Mesh(new THREE.CylinderGeometry(0.175, 0.145, 0.36, 18), jacketMat);
-        chest.scale.set(1.18, 1, 0.72);
-        chest.position.y = 0.12;
+        // Sculpted upper chest & pectorals
+        const chest = new THREE.Mesh(new THREE.CylinderGeometry(0.182, 0.148, 0.35, 22), jacketMat);
+        chest.scale.set(1.22, 1, 0.74);
+        chest.position.y = 0.13;
         chest.castShadow = true;
         torsoGroup.add(chest);
 
-        const innerShirt = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.11, 0.34, 14), shirtMat);
-        innerShirt.scale.set(1.0, 1, 0.76);
-        innerShirt.position.set(0, 0.12, -0.02);
+        // Collar & sternum undershirt
+        const collar = new THREE.Mesh(new THREE.TorusGeometry(0.088, 0.022, 10, 20), collarMat);
+        collar.rotation.x = Math.PI / 2 - 0.18;
+        collar.position.set(0, 0.31, -0.01);
+        torsoGroup.add(collar);
+
+        const innerShirt = new THREE.Mesh(new THREE.CylinderGeometry(0.115, 0.105, 0.34, 16), shirtMat);
+        innerShirt.scale.set(1.0, 1, 0.78);
+        innerShirt.position.set(0, 0.13, -0.025);
         torsoGroup.add(innerShirt);
 
-        const abdomen = new THREE.Mesh(new THREE.CylinderGeometry(0.142, 0.15, 0.24, 16), jacketMat);
-        abdomen.scale.set(1.12, 1, 0.72);
-        abdomen.position.y = -0.15;
+        // Jacket lapels
+        [-1, 1].forEach(side => {
+            const lapel = new THREE.Mesh(new THREE.BoxGeometry(0.042, 0.28, 0.025), collarMat);
+            lapel.position.set(side * 0.068, 0.16, -0.115);
+            lapel.rotation.z = side * 0.14;
+            torsoGroup.add(lapel);
+        });
+
+        // Tapered waist, leather belt & brass buckle
+        const abdomen = new THREE.Mesh(new THREE.CylinderGeometry(0.145, 0.155, 0.23, 20), jacketMat);
+        abdomen.scale.set(1.14, 1, 0.74);
+        abdomen.position.y = -0.14;
         torsoGroup.add(abdomen);
+
+        const belt = new THREE.Mesh(new THREE.CylinderGeometry(0.158, 0.158, 0.045, 20), beltMat);
+        belt.scale.set(1.15, 1, 0.76);
+        belt.position.y = -0.24;
+        const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.048, 0.02), buckleMat);
+        buckle.position.set(0, -0.24, -0.12);
+        torsoGroup.add(belt, buckle);
 
         bodyParts.torso = torsoGroup;
         playerRig.add(torsoGroup);
@@ -1920,43 +2028,60 @@
         function buildHumanArm(isRight) {
             const side = isRight ? 1 : -1;
             const shoulderPivot = new THREE.Group();
-            shoulderPivot.position.set(side * 0.22, 1.38, 0.02);
+            shoulderPivot.position.set(side * 0.228, 1.38, 0.02);
 
-            const deltoid = new THREE.Mesh(new THREE.SphereGeometry(0.062, 14, 14), jacketMat);
+            const deltoid = new THREE.Mesh(new THREE.SphereGeometry(0.066, 16, 16), jacketMat);
+            deltoid.scale.set(1.05, 1.15, 0.95);
             shoulderPivot.add(deltoid);
 
-            const upperArm = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.046, 0.28, 14), jacketMat);
-            upperArm.position.set(0, -0.14, 0);
+            const upperArm = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.048, 0.27, 16), jacketMat);
+            upperArm.position.set(0, -0.135, 0);
             shoulderPivot.add(upperArm);
 
+            // Rolled sleeve cuff
+            const cuff = new THREE.Mesh(new THREE.TorusGeometry(0.048, 0.011, 8, 16), collarMat);
+            cuff.rotation.x = Math.PI / 2;
+            cuff.position.set(0, -0.265, 0);
+            shoulderPivot.add(cuff);
+
             const elbowPivot = new THREE.Group();
-            elbowPivot.position.set(0, -0.28, 0);
+            elbowPivot.position.set(0, -0.275, 0);
             shoulderPivot.add(elbowPivot);
 
-            const elbowJoint = new THREE.Mesh(new THREE.SphereGeometry(0.046, 12, 12), skinMat);
+            const elbowJoint = new THREE.Mesh(new THREE.SphereGeometry(0.046, 14, 14), skinMat);
             elbowPivot.add(elbowJoint);
 
-            const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.046, 0.034, 0.26, 14), skinMat);
-            forearm.position.set(0, -0.13, 0);
+            // Anatomically tapered forearm (muscular near elbow, slender at wrist)
+            const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.048, 0.033, 0.255, 16), skinMat);
+            forearm.scale.set(1.06, 1, 0.92);
+            forearm.position.set(0, -0.128, 0);
             elbowPivot.add(forearm);
 
             const wristPivot = new THREE.Group();
-            wristPivot.position.set(0, -0.26, 0);
+            wristPivot.position.set(0, -0.255, 0);
             elbowPivot.add(wristPivot);
 
-            const palm = new THREE.Mesh(new THREE.BoxGeometry(0.068, 0.082, 0.028), skinMat);
+            // Sculpted palm & knuckles
+            const palm = new THREE.Mesh(new THREE.BoxGeometry(0.072, 0.082, 0.026), skinMat);
             palm.position.set(0, -0.04, 0);
             wristPivot.add(palm);
 
+            // Articulated 2-segment fingers
             for (let f = 0; f < 4; f++) {
-                const finger = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.006, 0.055, 8), skinMat);
-                finger.position.set(-0.024 + f * 0.016, -0.095, 0.008);
-                finger.rotation.x = 0.45;
-                wristPivot.add(finger);
+                const fingerLen = f === 1 ? 0.062 : f === 2 ? 0.058 : 0.048;
+                const proximal = new THREE.Mesh(new THREE.CylinderGeometry(0.0072, 0.0064, fingerLen * 0.55, 8), skinMat);
+                proximal.position.set(-0.025 + f * 0.0165, -0.09, 0.006);
+                proximal.rotation.x = 0.38;
+
+                const distal = new THREE.Mesh(new THREE.CylinderGeometry(0.0062, 0.0052, fingerLen * 0.5, 8), skinMat);
+                distal.position.set(-0.025 + f * 0.0165, -0.112, 0.022);
+                distal.rotation.x = 0.82;
+                wristPivot.add(proximal, distal);
             }
-            const thumb = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.007, 0.045, 8), skinMat);
-            thumb.position.set(-side * 0.038, -0.045, 0.015);
-            thumb.rotation.z = side * 0.6;
+            const thumb = new THREE.Mesh(new THREE.CylinderGeometry(0.0085, 0.007, 0.048, 8), skinMat);
+            thumb.position.set(-side * 0.04, -0.045, 0.016);
+            thumb.rotation.z = side * 0.65;
+            thumb.rotation.x = 0.3;
             wristPivot.add(thumb);
 
             return { shoulderPivot, elbowPivot, wristPivot };
@@ -1977,9 +2102,10 @@
         function buildHumanLeg(isRight) {
             const side = isRight ? 1 : -1;
             const hipPivot = new THREE.Group();
-            hipPivot.position.set(side * 0.105, 0.88, 0.02);
+            hipPivot.position.set(side * 0.108, 0.88, 0.02);
 
-            const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.082, 0.064, 0.42, 16), pantsMat);
+            const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.086, 0.065, 0.42, 18), pantsMat);
+            thigh.scale.set(1.04, 1, 1.08);
             thigh.position.y = -0.21;
             thigh.castShadow = true;
             hipPivot.add(thigh);
@@ -1988,18 +2114,26 @@
             kneePivot.position.set(0, -0.42, 0);
             hipPivot.add(kneePivot);
 
-            const knee = new THREE.Mesh(new THREE.SphereGeometry(0.062, 12, 12), pantsMat);
+            const knee = new THREE.Mesh(new THREE.SphereGeometry(0.064, 14, 14), pantsMat);
             kneePivot.add(knee);
 
-            const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.046, 0.42, 16), pantsMat);
-            shin.position.y = -0.21;
+            // Calf muscle contour
+            const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.062, 0.046, 0.41, 18), pantsMat);
+            shin.position.y = -0.205;
             shin.castShadow = true;
             kneePivot.add(shin);
 
-            const boot = new THREE.Mesh(new THREE.BoxGeometry(0.095, 0.075, 0.22), bootMat);
-            boot.position.set(0, -0.43, -0.045);
-            boot.castShadow = true;
-            kneePivot.add(boot);
+            // Detailed tactical boot with sole & ankle cuff
+            const bootAnkle = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.054, 0.09, 14), bootMat);
+            bootAnkle.position.set(0, -0.40, -0.01);
+            const bootVamp = new THREE.Mesh(new THREE.BoxGeometry(0.096, 0.068, 0.22), bootMat);
+            bootVamp.position.set(0, -0.44, -0.048);
+            const bootSole = new THREE.Mesh(
+                new THREE.BoxGeometry(0.104, 0.022, 0.235),
+                new THREE.MeshStandardMaterial({ color: 0x1f2229, roughness: 0.9 })
+            );
+            bootSole.position.set(0, -0.478, -0.048);
+            kneePivot.add(bootAnkle, bootVamp, bootSole);
 
             return { hipPivot, kneePivot };
         }
@@ -2086,113 +2220,373 @@
         const root = new THREE.Group();
 
         if (type === 'rusher') {
+            // Screaming Abyssal Skull-Wraith with layered ribs, spine, horns & tattered shadow shroud
             const boneMat = new THREE.MeshStandardMaterial({
-                color: 0x1a090c,
+                color: 0x261014,
                 emissive: 0x7f1d1d,
-                emissiveIntensity: 0.65,
-                roughness: 0.32,
-                metalness: 0.25
+                emissiveIntensity: 0.55,
+                roughness: 0.35,
+                metalness: 0.2
             });
             const sinewMat = new THREE.MeshStandardMaterial({
-                color: 0x450a0a,
+                color: 0x4c0519,
                 emissive: 0x991b1b,
-                emissiveIntensity: 0.45,
-                roughness: 0.55
+                emissiveIntensity: 0.4,
+                roughness: 0.6
             });
 
-            const cranium = new THREE.Mesh(new THREE.SphereGeometry(0.54, 28, 28), boneMat);
-            cranium.scale.set(0.88, 1.24, 1.05);
-            cranium.position.y = 1.52;
+            const cranium = new THREE.Mesh(new THREE.SphereGeometry(0.54, 30, 30), boneMat);
+            cranium.scale.set(0.86, 1.26, 1.08);
+            cranium.position.y = 1.56;
             root.add(cranium);
 
-            const brow = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.08, 12, 24, Math.PI), boneMat);
-            brow.position.set(0, 1.62, 0.36);
-            brow.rotation.x = 0.25;
-            root.add(brow);
+            // Sunken eye sockets & cheekbones
+            const socketMat = new THREE.MeshBasicMaterial({ color: 0x050102 });
+            [-0.2, 0.2].forEach(sx => {
+                const socket = new THREE.Mesh(new THREE.SphereGeometry(0.14, 16, 16), socketMat);
+                socket.position.set(sx, 1.58, 0.45);
+                root.add(socket);
+
+                const cheek = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.12, 0.22), boneMat);
+                cheek.position.set(sx * 1.35, 1.42, 0.36);
+                root.add(cheek);
+            });
 
             const jawGroup = new THREE.Group();
-            jawGroup.position.set(0, 1.22, 0.14);
-            const mandible = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.18, 0.48, 18), boneMat);
-            mandible.position.set(0, -0.22, 0.1);
+            jawGroup.position.set(0, 1.24, 0.14);
+            const mandible = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.16, 0.52, 20), boneMat);
+            mandible.position.set(0, -0.24, 0.12);
             jawGroup.add(mandible);
 
-            const fangMat = new THREE.MeshStandardMaterial({ color: 0xe4e4e7, roughness: 0.2 });
-            for (let t = -3; t <= 3; t++) {
-                const upperTooth = new THREE.Mesh(new THREE.ConeGeometry(0.032, 0.15, 8), fangMat);
+            const fangMat = new THREE.MeshStandardMaterial({ color: 0xf4f4f5, roughness: 0.18 });
+            for (let t = -4; t <= 4; t++) {
+                const upperTooth = new THREE.Mesh(new THREE.ConeGeometry(0.028, 0.16, 8), fangMat);
                 upperTooth.rotation.x = Math.PI;
-                upperTooth.position.set(t * 0.075, 1.24, 0.46);
+                upperTooth.position.set(t * 0.062, 1.26, 0.48);
                 root.add(upperTooth);
 
-                const lowerTooth = new THREE.Mesh(new THREE.ConeGeometry(0.028, 0.14, 8), fangMat);
-                lowerTooth.position.set(t * 0.07, -0.05, 0.28);
+                const lowerTooth = new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.15, 8), fangMat);
+                lowerTooth.position.set(t * 0.058, -0.04, 0.3);
                 jawGroup.add(lowerTooth);
             }
             root.add(jawGroup);
 
+            // Segmented Spine & Ribcage trailing behind the skull
+            for (let v = 0; v < 7; v++) {
+                const vertebra = new THREE.Mesh(new THREE.CylinderGeometry(0.12 - v * 0.01, 0.12 - v * 0.01, 0.16, 12), boneMat);
+                vertebra.position.set(0, 1.15 - v * 0.16, -0.25 - v * 0.14);
+                vertebra.rotation.x = 0.65;
+                root.add(vertebra);
+
+                if (v < 4) {
+                    const rib = new THREE.Mesh(new THREE.TorusGeometry(0.34 - v * 0.04, 0.028, 8, 18, Math.PI * 1.4), boneMat);
+                    rib.position.set(0, 1.12 - v * 0.16, -0.22 - v * 0.14);
+                    rib.rotation.x = Math.PI / 2 + 0.55;
+                    rib.rotation.z = -Math.PI * 0.2;
+                    root.add(rib);
+                }
+            }
+
             [-1, 1].forEach(side => {
-                const horn = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.85, 14), boneMat);
-                horn.position.set(side * 0.36, 1.98, -0.22);
-                horn.rotation.x = -0.65;
-                horn.rotation.z = -side * 0.38;
+                const horn = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.95, 16), boneMat);
+                horn.position.set(side * 0.38, 2.02, -0.24);
+                horn.rotation.x = -0.68;
+                horn.rotation.z = -side * 0.4;
                 root.add(horn);
 
-                const tendril = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.015, 1.35, 12), sinewMat);
-                tendril.position.set(side * 0.28, 0.92, -0.45);
-                tendril.rotation.x = 0.42;
+                const tendril = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.012, 1.55, 12), sinewMat);
+                tendril.position.set(side * 0.32, 0.95, -0.55);
+                tendril.rotation.x = 0.52;
                 root.add(tendril);
             });
 
-            const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff3b30 });
-            [-0.19, 0.19].forEach(ex => {
-                const eye = new THREE.Mesh(new THREE.SphereGeometry(0.075, 14, 14), eyeMat);
-                eye.position.set(ex, 1.56, 0.48);
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff2a2a });
+            [-0.2, 0.2].forEach(ex => {
+                const eye = new THREE.Mesh(new THREE.SphereGeometry(0.068, 14, 14), eyeMat);
+                eye.position.set(ex, 1.58, 0.52);
                 root.add(eye);
             });
 
-            const aura = new THREE.PointLight(0xdc2626, 3.4, 13);
-            aura.position.set(0, 1.5, 0.2);
+            const aura = new THREE.PointLight(0xdc2626, 3.6, 14);
+            aura.position.set(0, 1.55, 0.25);
             root.add(aura);
 
             root.userData = { head: cranium, jaw: jawGroup };
         } else if (type === 'watcher') {
-            const robeMat = new THREE.MeshStandardMaterial({ color: 0x0b0518, roughness: 0.92, side: THREE.DoubleSide });
-            const paleMat = new THREE.MeshStandardMaterial({ color: 0x3b2d4d, roughness: 0.65 });
+            // Seraphic Multi-Eyed Void Matriarch with floating halo rings & articulated skeletal fingers
+            const robeMat = new THREE.MeshStandardMaterial({ color: 0x090414, roughness: 0.92, side: THREE.DoubleSide });
+            const paleMat = new THREE.MeshStandardMaterial({ color: 0x4c3b63, roughness: 0.58 });
 
-            const outerCloak = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.78, 2.35, 24, 1, true), robeMat);
+            const outerCloak = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.85, 2.45, 28, 1, true), robeMat);
             outerCloak.position.y = 1.25;
             root.add(outerCloak);
 
-            const innerTorso = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.16, 1.4, 16), paleMat);
-            innerTorso.position.y = 1.65;
+            const innerTorso = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.14, 1.45, 18), paleMat);
+            innerTorso.position.y = 1.68;
             root.add(innerTorso);
 
-            const cowl = new THREE.Mesh(new THREE.SphereGeometry(0.36, 22, 22), robeMat);
-            cowl.scale.set(0.95, 1.25, 1.05);
-            cowl.position.y = 2.48;
+            const cowl = new THREE.Mesh(new THREE.SphereGeometry(0.36, 24, 24), robeMat);
+            cowl.scale.set(0.95, 1.28, 1.05);
+            cowl.position.y = 2.52;
             root.add(cowl);
 
+            // Floating Orbiting Eye-Halo
+            const haloRing = new THREE.Mesh(
+                new THREE.TorusGeometry(0.68, 0.022, 10, 32),
+                new THREE.MeshStandardMaterial({ color: 0x9333ea, emissive: 0x6b21a8, metalness: 0.8 })
+            );
+            haloRing.position.set(0, 2.65, -0.15);
+            root.add(haloRing);
+
             [-1, 1].forEach(side => {
-                const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.025, 0.85, 10), paleMat);
-                arm.position.set(side * 0.34, 1.72, 0.24);
-                arm.rotation.x = -0.75;
-                arm.rotation.z = side * 0.2;
-                root.add(arm);
+                const upperArm = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.032, 0.48, 12), paleMat);
+                upperArm.position.set(side * 0.34, 1.88, 0.14);
+                upperArm.rotation.x = -0.55;
+                upperArm.rotation.z = side * 0.25;
+                root.add(upperArm);
+
+                for (let cl = -1; cl <= 1; cl++) {
+                    const claw = new THREE.Mesh(new THREE.ConeGeometry(0.014, 0.24, 8), paleMat);
+                    claw.position.set(side * 0.42 + cl * 0.03, 1.56, 0.38);
+                    claw.rotation.x = Math.PI * 0.72;
+                    root.add(claw);
+                }
             });
 
-            const eyeMat = new THREE.MeshBasicMaterial({ color: 0xd8b4fe });
-            const eyeCoords = [[0, 2.52, 0.32], [-0.13, 2.45, 0.29], [0.13, 2.45, 0.29], [0, 2.36, 0.31], [-0.45, 2.65, 0.1], [0.45, 2.65, 0.1]];
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0xe9d5ff });
+            const eyeCoords = [
+                [0, 2.54, 0.34], [-0.14, 2.47, 0.3], [0.14, 2.47, 0.3], [0, 2.38, 0.32],
+                [-0.65, 2.65, -0.15], [0.65, 2.65, -0.15], [0, 3.3, -0.15], [-0.46, 3.1, -0.15], [0.46, 3.1, -0.15]
+            ];
             eyeCoords.forEach(([x, y, z]) => {
-                const e = new THREE.Mesh(new THREE.SphereGeometry(0.042, 12, 12), eyeMat);
+                const e = new THREE.Mesh(new THREE.SphereGeometry(0.044, 12, 12), eyeMat);
                 e.position.set(x, y, z);
                 root.add(e);
             });
 
-            const aura = new THREE.PointLight(0x9333ea, 2.5, 10);
-            aura.position.set(0, 2.2, 0.2);
+            const aura = new THREE.PointLight(0x9333ea, 2.6, 11);
+            aura.position.set(0, 2.25, 0.25);
             root.add(aura);
 
-            root.userData = { head: cowl };
+            root.userData = { head: cowl, halo: haloRing };
+        } else if (type === 'librarian') {
+            // Blind Towering Acoustic Predator with oversized acoustic ear-fins, exposed ribcage & long scythe claws
+            const fleshMat = new THREE.MeshStandardMaterial({ color: 0x3f2322, roughness: 0.48, metalness: 0.1 });
+            const boneMat = new THREE.MeshStandardMaterial({ color: 0xd6cfc7, roughness: 0.35 });
+
+            const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.19, 1.05, 18), fleshMat);
+            torso.scale.set(1.2, 1, 0.82);
+            torso.position.set(0, 1.78, 0.12);
+            torso.rotation.x = 0.28;
+            root.add(torso);
+
+            for (let r = 0; r < 5; r++) {
+                const rib = new THREE.Mesh(new THREE.TorusGeometry(0.28 - r * 0.018, 0.024, 8, 18, Math.PI * 1.35), boneMat);
+                rib.position.set(0, 2.08 - r * 0.15, 0.22);
+                rib.rotation.x = Math.PI / 2 + 0.28;
+                rib.rotation.z = -Math.PI * 0.18;
+                root.add(rib);
+            }
+
+            // Blind smooth skull with massive acoustic hearing dishes
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.26, 20, 20), boneMat);
+            head.scale.set(0.85, 1.35, 1.15);
+            head.position.set(0, 2.52, 0.38);
+            root.add(head);
+
+            [-1, 1].forEach(side => {
+                const earDish = new THREE.Mesh(new THREE.ConeGeometry(0.24, 0.45, 14, 1, true), fleshMat);
+                earDish.position.set(side * 0.32, 2.58, 0.34);
+                earDish.rotation.z = -side * 0.85;
+                earDish.rotation.y = side * 0.35;
+                root.add(earDish);
+            });
+
+            function makeLibrarianLimb(isLeg, side) {
+                const pivot = new THREE.Group();
+                pivot.position.set(side * (isLeg ? 0.16 : 0.42), isLeg ? 1.25 : 2.15, isLeg ? 0 : 0.16);
+                const upper = new THREE.Mesh(new THREE.CylinderGeometry(isLeg ? 0.08 : 0.06, isLeg ? 0.06 : 0.045, isLeg ? 0.62 : 0.78, 14), fleshMat);
+                upper.position.y = isLeg ? -0.31 : -0.39;
+                const lower = new THREE.Mesh(new THREE.CylinderGeometry(isLeg ? 0.058 : 0.042, isLeg ? 0.036 : 0.02, isLeg ? 0.62 : 0.82, 14), fleshMat);
+                lower.position.y = isLeg ? -0.92 : -1.18;
+                pivot.add(upper, lower);
+                if (!isLeg) {
+                    const claw = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.35, 8), boneMat);
+                    claw.position.set(0, -1.68, 0.08);
+                    claw.rotation.x = Math.PI * 0.85;
+                    pivot.add(claw);
+                    pivot.rotation.x = -0.35;
+                }
+                return pivot;
+            }
+
+            const leftArm = makeLibrarianLimb(false, -1);
+            const rightArm = makeLibrarianLimb(false, 1);
+            const leftLeg = makeLibrarianLimb(true, -1);
+            const rightLeg = makeLibrarianLimb(true, 1);
+            root.add(leftArm, rightArm, leftLeg, rightLeg);
+
+            const aura = new THREE.PointLight(0xd97706, 1.8, 9);
+            aura.position.set(0, 2.2, 0.4);
+            root.add(aura);
+
+            root.userData = { head, leftArm, rightArm, leftLeg, rightLeg };
+        } else if (type === 'golem') {
+            // Towering Craggy Forest Moss Golem
+            const stoneMat = new THREE.MeshStandardMaterial({ color: 0x29322c, roughness: 0.92, metalness: 0.08 });
+            const mossMat = new THREE.MeshStandardMaterial({ color: 0x15803d, emissive: 0x052e16, roughness: 0.85 });
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0x4ade80 });
+
+            const torso = new THREE.Mesh(new THREE.DodecahedronGeometry(0.68, 1), stoneMat);
+            torso.scale.set(1.25, 1.35, 0.95);
+            torso.position.y = 1.75;
+            root.add(torso);
+
+            const mossCap = new THREE.Mesh(new THREE.DodecahedronGeometry(0.62, 1), mossMat);
+            mossCap.scale.set(1.28, 0.6, 0.98);
+            mossCap.position.y = 2.22;
+            root.add(mossCap);
+
+            const head = new THREE.Mesh(new THREE.DodecahedronGeometry(0.34, 0), stoneMat);
+            head.position.set(0, 2.68, 0.14);
+            root.add(head);
+
+            [-0.12, 0.12].forEach(ex => {
+                const eye = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.04, 0.05), eyeMat);
+                eye.position.set(ex, 2.7, 0.42);
+                root.add(eye);
+            });
+
+            function makeGolemLimb(isLeg, side) {
+                const pivot = new THREE.Group();
+                pivot.position.set(side * (isLeg ? 0.34 : 0.86), isLeg ? 1.05 : 2.15, 0);
+                const seg1 = new THREE.Mesh(new THREE.DodecahedronGeometry(isLeg ? 0.22 : 0.24, 0), stoneMat);
+                seg1.scale.set(0.9, 1.8, 0.9);
+                seg1.position.y = -0.38;
+                const seg2 = new THREE.Mesh(new THREE.DodecahedronGeometry(isLeg ? 0.2 : 0.26, 0), mossMat);
+                seg2.scale.set(0.95, 1.7, 0.95);
+                seg2.position.y = -0.88;
+                pivot.add(seg1, seg2);
+                return pivot;
+            }
+
+            const leftArm = makeGolemLimb(false, -1);
+            const rightArm = makeGolemLimb(false, 1);
+            const leftLeg = makeGolemLimb(true, -1);
+            const rightLeg = makeGolemLimb(true, 1);
+            root.add(leftArm, rightArm, leftLeg, rightLeg);
+
+            const aura = new THREE.PointLight(0x22c55e, 2.2, 10);
+            aura.position.set(0, 2.0, 0.4);
+            root.add(aura);
+
+            root.userData = { head, leftArm, rightArm, leftLeg, rightLeg };
+        } else if (type === 'goblin') {
+            // Crouched Wicked Forest Goblin with pointed ears, jagged blade & glowing yellow eyes
+            const skinMat = new THREE.MeshStandardMaterial({ color: 0x1e4620, roughness: 0.62 });
+            const ragMat = new THREE.MeshStandardMaterial({ color: 0x3f2e21, roughness: 0.9 });
+            const bladeMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.85, roughness: 0.25 });
+
+            const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 0.58, 14), ragMat);
+            torso.position.set(0, 0.82, 0.08);
+            torso.rotation.x = 0.35;
+            root.add(torso);
+
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 16), skinMat);
+            head.scale.set(1.05, 0.92, 1.15);
+            head.position.set(0, 1.22, 0.24);
+            root.add(head);
+
+            [-1, 1].forEach(side => {
+                const ear = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.34, 8), skinMat);
+                ear.position.set(side * 0.28, 1.24, 0.2);
+                ear.rotation.z = -side * 1.15;
+                root.add(ear);
+            });
+
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0xfacc15 });
+            [-0.08, 0.08].forEach(ex => {
+                const eye = new THREE.Mesh(new THREE.SphereGeometry(0.032, 10, 10), eyeMat);
+                eye.position.set(ex, 1.25, 0.44);
+                root.add(eye);
+            });
+
+            const leftArm = new THREE.Group();
+            leftArm.position.set(-0.24, 1.02, 0.14);
+            const armMeshL = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.035, 0.52, 10), skinMat);
+            armMeshL.position.y = -0.26;
+            leftArm.add(armMeshL);
+
+            const rightArm = new THREE.Group();
+            rightArm.position.set(0.24, 1.02, 0.14);
+            const armMeshR = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.035, 0.52, 10), skinMat);
+            armMeshR.position.y = -0.26;
+            const dagger = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.42, 6), bladeMat);
+            dagger.position.set(0, -0.52, 0.15);
+            dagger.rotation.x = Math.PI / 2;
+            rightArm.add(armMeshR, dagger);
+
+            const leftLeg = new THREE.Group();
+            leftLeg.position.set(-0.12, 0.55, 0);
+            const legMeshL = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.04, 0.55, 10), skinMat);
+            legMeshL.position.y = -0.275;
+            leftLeg.add(legMeshL);
+
+            const rightLeg = new THREE.Group();
+            rightLeg.position.set(0.12, 0.55, 0);
+            const legMeshR = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.04, 0.55, 10), skinMat);
+            legMeshR.position.y = -0.275;
+            rightLeg.add(legMeshR);
+
+            root.add(leftArm, rightArm, leftLeg, rightLeg);
+            root.userData = { head, leftArm, rightArm, leftLeg, rightLeg };
+        } else if (type === 'magma_fiend') {
+            // Molten Obsidian & Lava-Veined Magma Fiend
+            const obsidianMat = new THREE.MeshStandardMaterial({ color: 0x140b0a, roughness: 0.45, metalness: 0.4 });
+            const lavaMat = new THREE.MeshStandardMaterial({ color: 0xf97316, emissive: 0xea580c, emissiveIntensity: 1.2 });
+
+            const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.42, 1), lavaMat);
+            core.position.y = 1.55;
+            root.add(core);
+
+            const torsoArmor = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.22, 0.85, 12), obsidianMat);
+            torsoArmor.position.y = 1.55;
+            root.add(torsoArmor);
+
+            const head = new THREE.Mesh(new THREE.OctahedronGeometry(0.28, 0), obsidianMat);
+            head.position.set(0, 2.24, 0.08);
+            root.add(head);
+
+            [-0.1, 0.1].forEach(ex => {
+                const eye = new THREE.Mesh(new THREE.SphereGeometry(0.042, 10, 10), new THREE.MeshBasicMaterial({ color: 0xfef08a }));
+                eye.position.set(ex, 2.26, 0.28);
+                root.add(eye);
+            });
+
+            function makeMagmaLimb(isLeg, side) {
+                const pivot = new THREE.Group();
+                pivot.position.set(side * (isLeg ? 0.18 : 0.46), isLeg ? 1.08 : 1.88, 0);
+                const seg = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.05, isLeg ? 1.05 : 0.95, 10), obsidianMat);
+                seg.position.y = isLeg ? -0.52 : -0.45;
+                const vein = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.02, isLeg ? 0.95 : 0.85, 8), lavaMat);
+                vein.position.set(0, isLeg ? -0.52 : -0.45, 0.04);
+                pivot.add(seg, vein);
+                return pivot;
+            }
+
+            const leftArm = makeMagmaLimb(false, -1);
+            const rightArm = makeMagmaLimb(false, 1);
+            const leftLeg = makeMagmaLimb(true, -1);
+            const rightLeg = makeMagmaLimb(true, 1);
+            root.add(leftArm, rightArm, leftLeg, rightLeg);
+
+            const aura = new THREE.PointLight(0xf97316, 3.0, 12);
+            aura.position.set(0, 1.6, 0.3);
+            root.add(aura);
+
+            root.userData = { head, leftArm, rightArm, leftLeg, rightLeg };
         } else {
+            // The Stalker / The Hound: Gaunt Pale Nocturnal Hunter with exposed spine, glowing amber eyes & long limbs
             const skinMat = new THREE.MeshStandardMaterial({ color: 0x241d20, roughness: 0.62, metalness: 0.08 });
             const boneAccent = new THREE.MeshStandardMaterial({ color: 0x3b3135, roughness: 0.5 });
 
@@ -2224,7 +2618,7 @@
             head.position.set(0, 2.04, 0.22);
             root.add(head);
 
-            const eyeMat = new THREE.MeshBasicMaterial({ color: 0xfbbf24 });
+            const eyeMat = new THREE.MeshBasicMaterial({ color: type === 'hound' ? 0xef4444 : 0xfbbf24 });
             [-0.065, 0.065].forEach(ex => {
                 const eye = new THREE.Mesh(new THREE.SphereGeometry(0.028, 10, 10), eyeMat);
                 eye.position.set(ex, 2.06, 0.36);
@@ -2352,45 +2746,26 @@
         }
     }
 
-    buildMenuGrandLobby();
-
-    // ==================== 10. SEAMLESS ARCHITECTURAL ROOMS (NO TELEPORTS, CIRCULAR VAULTED ROOFS, ROTUNDAS, TRIANGULAR & TWISTING HALLWAYS) ====================
-    const worldGroup = new THREE.Group();
-    scene.add(worldGroup);
-
-    const playerPos = new THREE.Vector3(0, 1.68, 0);
-    const playerRot = { yaw: 0, pitch: 0 };
-
-    function clearWorld() {
-        while (worldGroup.children.length > 0) {
-            worldGroup.remove(worldGroup.children[0]);
-        }
-        state.interactables = [];
-        state.pickups = [];
-        state.roomLights = [];
-        state.animatedClosets = [];
-        state.animatedDrawers = [];
-        state.activeEntities = [];
-        state.activeRooms = [];
-        state.currentRoomObj = null;
-        state.isHiding = false;
-        state.activeCloset = null;
-        document.getElementById('hiding-banner').classList.add('hidden');
-        document.getElementById('entity-sign-banner').classList.add('hidden');
-    }
-
-    function buildArchedDoorAssembly(parentGroup, numberText, isAbyss, localX, localZ, localRotY = 0) {
+    function buildArchedDoorAssembly(parentGroup, numberText, isAbyss, localX, localZ, localRotY = 0, doorStyle = 'standard') {
         const assembly = new THREE.Group();
         assembly.position.set(localX, 0, localZ);
         assembly.rotation.y = localRotY;
 
-        const trimMat = new THREE.MeshStandardMaterial({ color: 0x161210, roughness: 0.42, metalness: 0.25 });
+        const isBlackOmen = doorStyle === 'black_omen';
+        const isLibrarySpecial = doorStyle === 'library_grand';
+
+        const trimMat = new THREE.MeshStandardMaterial({
+            color: isLibrarySpecial ? 0xd97706 : isBlackOmen ? 0x050507 : 0x161210,
+            roughness: isLibrarySpecial ? 0.25 : 0.42,
+            metalness: isLibrarySpecial ? 0.85 : 0.25
+        });
         const woodMat = new THREE.MeshStandardMaterial({
-            map: texWood,
+            map: isBlackOmen ? null : texWood,
             bumpMap: bumpWood,
             bumpScale: 0.05,
-            color: isAbyss ? 0x0c4a6e : 0x5c2c16,
-            roughness: 0.48
+            color: isBlackOmen ? 0x070709 : isLibrarySpecial ? 0x451a03 : isAbyss ? 0x0c4a6e : 0x5c2c16,
+            roughness: isBlackOmen ? 0.2 : 0.48,
+            metalness: isBlackOmen ? 0.4 : 0.1
         });
 
         const leftJamb = new THREE.Mesh(new THREE.BoxGeometry(0.24, 2.75, 0.36), trimMat);
@@ -2405,6 +2780,18 @@
 
         assembly.add(leftJamb, rightJamb, archOuter);
 
+        if (isLibrarySpecial) {
+            const crest = new THREE.Mesh(new THREE.OctahedronGeometry(0.24, 0), trimMat);
+            crest.position.set(0, 3.85, 0.12);
+            const crestGlow = new THREE.PointLight(0xfbbf24, 1.5, 5);
+            crestGlow.position.set(0, 3.6, 0.5);
+            assembly.add(crest, crestGlow);
+        } else if (isBlackOmen) {
+            const voidGlow = new THREE.PointLight(0xef4444, 1.2, 4.5);
+            voidGlow.position.set(0, 2.4, 0.5);
+            assembly.add(voidGlow);
+        }
+
         const doorPivot = new THREE.Group();
         doorPivot.position.set(-0.8, 0, 0.04);
 
@@ -2417,13 +2804,20 @@
         doorArchTop.rotation.y = Math.PI / 2;
         doorArchTop.position.set(0.8, 2.72, 0);
 
-        const panelMat = new THREE.MeshStandardMaterial({ color: isAbyss ? 0x082f49 : 0x3b1a0b, roughness: 0.55 });
+        const panelMat = new THREE.MeshStandardMaterial({
+            color: isBlackOmen ? 0x020203 : isLibrarySpecial ? 0x78350f : isAbyss ? 0x082f49 : 0x3b1a0b,
+            roughness: 0.55
+        });
         const upperPanel = new THREE.Mesh(new THREE.BoxGeometry(1.12, 0.95, 0.17), panelMat);
         upperPanel.position.set(0.8, 2.02, 0);
         const lowerPanel = new THREE.Mesh(new THREE.BoxGeometry(1.12, 0.95, 0.17), panelMat);
         lowerPanel.position.set(0.8, 0.82, 0);
 
-        const brassMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.88, roughness: 0.22 });
+        const brassMat = new THREE.MeshStandardMaterial({
+            color: isBlackOmen ? 0xef4444 : 0xf59e0b,
+            metalness: 0.88,
+            roughness: 0.22
+        });
         const handleBase = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.18, 12), brassMat);
         handleBase.rotation.x = Math.PI / 2;
         handleBase.position.set(1.42, 1.24, 0);
@@ -2592,33 +2986,365 @@
         roomObj.group.add(dresser);
     }
 
-    function buildPortalWall(parentGroup, wallWidth, wallHeight, wallMat, lx, lz, rotY) {
-        const portalGroup = new THREE.Group();
-        portalGroup.position.set(lx, 0, lz);
-        portalGroup.rotation.y = rotY;
+    // ==================== 10. SEAMLESS MULTI-ROOM ARCHITECTURAL WORLD GENERATOR ====================
+    const worldGroup = new THREE.Group();
+    scene.add(worldGroup);
 
-        const sideW = (wallWidth - 1.9) / 2;
-        if (sideW > 0.05) {
-            const leftP = new THREE.Mesh(new THREE.PlaneGeometry(sideW, wallHeight), wallMat);
-            leftP.position.set(-(1.9 / 2 + sideW / 2), wallHeight / 2, 0);
-            const rightP = new THREE.Mesh(new THREE.PlaneGeometry(sideW, wallHeight), wallMat);
-            rightP.position.set(1.9 / 2 + sideW / 2, wallHeight / 2, 0);
-            portalGroup.add(leftP, rightP);
+    buildMenuGrandLobby();
+
+    function clearWorld() {
+        while (worldGroup.children.length > 0) {
+            worldGroup.remove(worldGroup.children[0]);
         }
+        state.activeEntities = [];
+        state.interactables = [];
+        state.pickups = [];
+        state.roomLights = [];
+        state.animatedClosets = [];
+        state.animatedDrawers = [];
+        state.activeRooms = [];
+        state.currentRoomObj = null;
+        state.isHiding = false;
+        document.getElementById('hiding-banner').classList.add('hidden');
+        document.getElementById('entity-sign-banner').classList.add('hidden');
+    }
 
-        const headerH = Math.max(0.2, wallHeight - 2.85);
-        const headerP = new THREE.Mesh(new THREE.PlaneGeometry(1.9, headerH), wallMat);
-        headerP.position.set(0, 2.85 + headerH / 2, 0);
-        portalGroup.add(headerP);
+    function buildPortalWall(parentGroup, width, height, mat, lx, lz, rotY = 0) {
+        const portal = new THREE.Group();
+        portal.position.set(lx, 0, lz);
+        portal.rotation.y = rotY;
 
-        parentGroup.add(portalGroup);
+        const doorHalfW = 1.02;
+        const doorH = 2.78;
+        const sideW = Math.max(0.4, (width - doorHalfW * 2) / 2 + 0.5);
+
+        const leftWall = new THREE.Mesh(new THREE.BoxGeometry(sideW, height + 2.5, 0.34), mat);
+        leftWall.position.set(-(doorHalfW + sideW / 2 - 0.05), (height + 2.5) / 2, 0);
+
+        const rightWall = new THREE.Mesh(new THREE.BoxGeometry(sideW, height + 2.5, 0.34), mat);
+        rightWall.position.set(doorHalfW + sideW / 2 - 0.05, (height + 2.5) / 2, 0);
+
+        const topHeader = new THREE.Mesh(new THREE.BoxGeometry(doorHalfW * 2 + 0.4, height - doorH + 2.8, 0.34), mat);
+        topHeader.position.set(0, doorH + (height - doorH + 2.8) / 2 - 0.1, 0);
+
+        portal.add(leftWall, rightWall, topHeader);
+        parentGroup.add(portal);
+    }
+
+    function registerSafeProp(roomObj, lx, lz, radius = 1.35) {
+        if (!roomObj.occupiedSpots) roomObj.occupiedSpots = [];
+        roomObj.occupiedSpots.push({ x: lx, z: lz, r: radius });
+    }
+
+    function findSafeFloorSpot(roomObj, preferredX, preferredZ, minWallClearance = 1.1) {
+        const candidates = [
+            { x: preferredX, z: preferredZ },
+            { x: 0, z: preferredZ },
+            { x: -1.1, z: preferredZ },
+            { x: 1.1, z: preferredZ },
+            { x: 0, z: preferredZ - 2.2 },
+            { x: 0, z: preferredZ + 2.2 },
+            { x: -1.2, z: preferredZ - 2.0 },
+            { x: 1.2, z: preferredZ + 2.0 }
+        ];
+        for (const pt of candidates) {
+            let blocked = false;
+            for (const spot of (roomObj.occupiedSpots || [])) {
+                if (Math.hypot(pt.x - spot.x, pt.z - spot.z) < spot.r + minWallClearance) {
+                    blocked = true;
+                    break;
+                }
+            }
+            if (!blocked) {
+                registerSafeProp(roomObj, pt.x, pt.z, 1.0);
+                return pt;
+            }
+        }
+        return { x: 0, z: preferredZ };
+    }
+
+    function createDetailedKeyMesh() {
+        const keyGroup = new THREE.Group();
+        const goldMat = new THREE.MeshStandardMaterial({
+            color: 0xfbbf24,
+            emissive: 0xb45309,
+            emissiveIntensity: 0.45,
+            metalness: 0.92,
+            roughness: 0.18
+        });
+
+        const bow = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.024, 12, 24), goldMat);
+        bow.position.y = 0.22;
+        const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.04, 12), goldMat);
+        collar.position.y = 0.1;
+        const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.34, 12), goldMat);
+        shaft.position.y = -0.07;
+
+        const bit1 = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.035, 0.022), goldMat);
+        bit1.position.set(0.045, -0.17, 0);
+        const bit2 = new THREE.Mesh(new THREE.BoxGeometry(0.065, 0.03, 0.022), goldMat);
+        bit2.position.set(0.035, -0.22, 0);
+
+        const pedestal = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.22, 0.28, 0.85, 16),
+            new THREE.MeshStandardMaterial({ color: 0x1e1b18, roughness: 0.5, metalness: 0.3 })
+        );
+        pedestal.position.y = -0.62;
+
+        const glow = new THREE.PointLight(0xfbbf24, 1.6, 5.5);
+        glow.position.y = 0.1;
+
+        keyGroup.add(bow, collar, shaft, bit1, bit2, pedestal, glow);
+        return keyGroup;
+    }
+
+    function createDetailedGeneratorMesh() {
+        const genGroup = new THREE.Group();
+        const steelMat = new THREE.MeshStandardMaterial({ color: 0x27272a, metalness: 0.78, roughness: 0.32 });
+        const rustMat = new THREE.MeshStandardMaterial({ color: 0x451a03, metalness: 0.55, roughness: 0.5 });
+        const copperMat = new THREE.MeshStandardMaterial({ color: 0xd97706, metalness: 0.88, roughness: 0.24 });
+
+        const basePlinth = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.2, 0.85), steelMat);
+        basePlinth.position.y = 0.1;
+
+        const cabinet = new THREE.Mesh(new THREE.BoxGeometry(0.95, 1.35, 0.68), rustMat);
+        cabinet.position.y = 0.875;
+
+        const leftCoil = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.58, 16), copperMat);
+        leftCoil.position.set(-0.24, 1.12, 0.36);
+        const rightCoil = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.58, 16), copperMat);
+        rightCoil.position.set(0.24, 1.12, 0.36);
+
+        const gauge = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.11, 0.11, 0.05, 16),
+            new THREE.MeshStandardMaterial({ color: 0xfef3c7, emissive: 0x78350f })
+        );
+        gauge.rotation.x = Math.PI / 2;
+        gauge.position.set(0, 1.34, 0.35);
+
+        const leverPivot = new THREE.Group();
+        leverPivot.position.set(0, 0.85, 0.35);
+        const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.42, 10), steelMat);
+        arm.position.set(0, 0.18, 0.06);
+        arm.rotation.x = 0.45;
+        const grip = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.036, 0.036, 0.18, 12),
+            new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.4 })
+        );
+        grip.rotation.z = Math.PI / 2;
+        grip.position.set(0, 0.36, 0.14);
+        leverPivot.add(arm, grip);
+
+        const statusOrb = new THREE.Mesh(
+            new THREE.SphereGeometry(0.11, 16, 16),
+            new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xdc2626, emissiveIntensity: 0.9 })
+        );
+        statusOrb.position.set(0, 1.66, 0);
+
+        const beacon = new THREE.PointLight(0xef4444, 1.4, 5);
+        beacon.position.set(0, 1.85, 0.2);
+
+        genGroup.add(basePlinth, cabinet, leftCoil, rightCoil, gauge, leverPivot, statusOrb, beacon);
+        genGroup.userData = { statusOrb, leverPivot, beacon };
+        return genGroup;
+    }
+
+    function spawnLightOrb(worldPos) {
+        const orbGroup = new THREE.Group();
+        const core = new THREE.Mesh(
+            new THREE.OctahedronGeometry(0.24, 1),
+            new THREE.MeshBasicMaterial({ color: 0x67e8f9 })
+        );
+        const glow = new THREE.PointLight(0x06b6d4, 1.6, 7);
+        orbGroup.add(core, glow);
+        orbGroup.position.copy(worldPos);
+        worldGroup.add(orbGroup);
+        state.pickups.push({ type: 'orb', mesh: orbGroup });
+    }
+
+    function scheduleEntitySpawn(roomObj) {
+        const types = ['rusher', 'watcher', 'stalker'];
+        const chosen = types[Math.floor(Math.random() * types.length)];
+        const banner = document.getElementById('entity-sign-banner');
+
+        if (chosen === 'rusher') {
+            sfx.playWarningCue('rusher');
+            banner.textContent = '⚠️ THE LIGHTS ARE FLICKERING — HIDE IN A CLOSET NOW!';
+            banner.classList.remove('hidden');
+
+            setTimeout(() => {
+                if (!state.isPlaying || state.currentRoomObj !== roomObj) return;
+                const entMesh = buildEntityModel('rusher');
+                entMesh.position.copy(localToWorld(roomObj, 0, 0, 1.5));
+                entMesh.rotation.y = roomObj.worldYaw + Math.PI;
+                worldGroup.add(entMesh);
+                state.activeEntities.push({
+                    type: 'rusher',
+                    roomObj,
+                    mesh: entMesh,
+                    localZ: 1.5,
+                    speed: state.difficulty === 'normal' ? 16 : state.difficulty === 'nightmare' ? 21 : 26
+                });
+            }, 2200);
+        } else if (chosen === 'watcher') {
+            sfx.playWarningCue('watcher');
+            banner.textContent = '👁️ WHISPERS IN THE DARK — DO NOT LOOK AT THE WATCHER!';
+            banner.classList.remove('hidden');
+
+            const entMesh = buildEntityModel('watcher');
+            const wPos = localToWorld(roomObj, (Math.random() - 0.5) * 1.8, 0, -10.5);
+            entMesh.position.copy(wPos);
+            worldGroup.add(entMesh);
+            state.activeEntities.push({
+                type: 'watcher',
+                mesh: entMesh,
+                stareTime: 0,
+                life: 8.5
+            });
+        } else if (chosen === 'stalker') {
+            sfx.playWarningCue('stalker');
+            banner.textContent = '🔦 FOOTSTEPS BEHIND YOU — AIM FLASHLIGHT & HOLD [RMB / BLAST]!';
+            banner.classList.remove('hidden');
+
+            const entMesh = buildEntityModel('stalker');
+            const sPos = localToWorld(roomObj, 0, 0, -1.6);
+            entMesh.position.copy(sPos);
+            worldGroup.add(entMesh);
+            state.activeEntities.push({
+                type: 'stalker',
+                mesh: entMesh,
+                hp: 100,
+                speed: state.difficulty === 'normal' ? 2.5 : state.difficulty === 'nightmare' ? 3.3 : 4.1
+            });
+        }
+    }
+
+    // ==================== PREBUILT DETERMINISTIC MAP BLUEPRINT GENERATOR ====================
+    function prebuildAllBlueprints() {
+        state.prebuiltBlueprints = {};
+        const modes = ['corridor', 'abyss', 'magma'];
+
+        modes.forEach(modeKey => {
+            state.prebuiltBlueprints[modeKey] = {};
+            const startR = modeKey === 'abyss' ? -100 : 1;
+            const endR = modeKey === 'abyss' ? 0 : modeKey === 'magma' ? 25 : 101;
+
+            let cursorOrigin = new THREE.Vector3(0, 0, 0);
+            let cursorYaw = 0;
+
+            for (let r = startR; r <= endR; r++) {
+                let shapeType = 'vaulted_hall';
+                let exitDoorStyle = 'standard';
+
+                if (modeKey === 'corridor') {
+                    if (r === 12) {
+                        shapeType = 'omen_library';
+                        exitDoorStyle = 'library_grand'; // Special Ornate Gilded Door entering the 5x Grand Library
+                    } else if (r === 13) {
+                        shapeType = 'grand_library';
+                    } else if (r === 36) {
+                        shapeType = 'omen_hunt';
+                        exitDoorStyle = 'black_omen'; // Pitch-Black Door before the 7-room Memory Hunt Labyrinth
+                    } else if (r >= 37 && r <= 43) {
+                        shapeType = 'hunt_maze'; // 7-Room Labyrinth (Doors 37 through 43)
+                    } else if (r > 80 && r <= 100) {
+                        shapeType = 'outdoors_forest';
+                    } else if (r > 2) {
+                        const shapes = ['vaulted_hall', 'rotunda_round', 'triangular_gallery', 'twisting_bend'];
+                        shapeType = shapes[r % shapes.length];
+                    }
+                } else if (modeKey === 'abyss') {
+                    const shapes = ['vaulted_hall', 'rotunda_round', 'triangular_gallery', 'twisting_bend'];
+                    shapeType = shapes[Math.abs(r) % shapes.length];
+                } else if (modeKey === 'magma') {
+                    shapeType = 'magma_cavern';
+                }
+
+                // Compute exact local exit offset & yaw so every room aligns seamlessly with zero overlap
+                let exitLocalPos = new THREE.Vector3(0, 0, -22);
+                let exitLocalYaw = 0;
+                if (shapeType === 'grand_library') {
+                    exitLocalPos.set(0, 0, -64); // 5x Massive Multi-Floor Grand Library
+                } else if (shapeType === 'hunt_maze') {
+                    exitLocalPos.set(0, 0, -24);
+                } else if (shapeType === 'outdoors_forest') {
+                    exitLocalPos.set(0, 0, -26);
+                } else if (shapeType === 'magma_cavern') {
+                    exitLocalPos.set(0, 0, -24);
+                } else if (shapeType === 'rotunda_round') {
+                    exitLocalPos.set(0, 0, -14.2);
+                } else if (shapeType === 'triangular_gallery') {
+                    exitLocalPos.set(0, 0, -20);
+                } else if (shapeType === 'twisting_bend') {
+                    const turnDir = Math.abs(r) % 2 === 0 ? 1 : -1;
+                    exitLocalPos.set(turnDir * 12.5, 0, -10.8);
+                    exitLocalYaw = turnDir === 1 ? -Math.PI / 2 : Math.PI / 2;
+                }
+
+                // Pre-assign quest type & guaranteed wall-free coordinates
+                let questPlan = { type: 'none' };
+                const inSpecialZone = (shapeType === 'grand_library' || shapeType === 'hunt_maze' || shapeType === 'outdoors_forest' || shapeType === 'magma_cavern' || shapeType === 'twisting_bend');
+                if (shapeType === 'grand_library') {
+                    const digits = [
+                        Math.floor(1 + Math.random() * 9),
+                        Math.floor(1 + Math.random() * 9),
+                        Math.floor(1 + Math.random() * 9),
+                        Math.floor(1 + Math.random() * 9)
+                    ];
+                    questPlan = { type: 'library_cipher', code: digits.join(''), digits };
+                } else if (shapeType === 'hunt_maze') {
+                    // Generate 3 door numbers (Left, Center, Right) where 1 is the exact next door and 2 are lethal decoys!
+                    const realNext = r + 1;
+                    const fakeA = realNext + 1;
+                    const fakeB = realNext + 2;
+                    const slots = [realNext, fakeA, fakeB];
+                    // Shuffle door positions so left/center/right varies unpredictably
+                    for (let k = slots.length - 1; k > 0; k--) {
+                        const j = Math.floor(Math.random() * (k + 1));
+                        [slots[k], slots[j]] = [slots[j], slots[k]];
+                    }
+                    questPlan = { type: 'hunt_maze', realNext, slots };
+                } else if (modeKey === 'abyss') {
+                    questPlan = { type: 'abyss_orbs', required: 3 };
+                } else if (!inSpecialZone && Math.abs(r) > 1 && r % 4 === 0) {
+                    questPlan = { type: 'lever', x: 0, z: -10.5 };
+                } else if (!inSpecialZone && Math.abs(r) > 2 && r % 4 === 2) {
+                    questPlan = { type: 'key', x: 0, z: -7.5 };
+                }
+
+                const exitWorldPos = exitLocalPos.clone()
+                    .applyAxisAngle(new THREE.Vector3(0, 1, 0), cursorYaw)
+                    .add(cursorOrigin);
+                const exitWorldYaw = cursorYaw + exitLocalYaw;
+
+                state.prebuiltBlueprints[modeKey][r] = {
+                    roomNumber: r,
+                    modeKey,
+                    shapeType,
+                    exitDoorStyle,
+                    worldOrigin: cursorOrigin.clone(),
+                    worldYaw: cursorYaw,
+                    exitLocalPos: exitLocalPos.clone(),
+                    exitLocalYaw,
+                    exitWorldPos: exitWorldPos.clone(),
+                    exitWorldYaw,
+                    questPlan
+                };
+
+                cursorOrigin.copy(exitWorldPos);
+                cursorYaw = exitWorldYaw;
+            }
+        });
     }
 
     function createRoomSegment(roomNum, worldOrigin, worldYaw) {
+        const bp = state.prebuiltBlueprints[state.mode]?.[roomNum];
         const isAbyss = state.mode === 'abyss';
+        const isMagma = state.mode === 'magma';
         const absRoom = Math.abs(roomNum);
-        const shapes = ['vaulted_hall', 'rotunda_round', 'triangular_gallery', 'twisting_bend'];
-        const shapeType = absRoom === 1 ? 'vaulted_hall' : shapes[(absRoom + Math.floor(Math.random() * 2)) % shapes.length];
+        const shapeType = bp ? bp.shapeType : 'vaulted_hall';
+        const exitDoorStyle = bp ? bp.exitDoorStyle : 'standard';
+        const isOutdoors = shapeType === 'outdoors_forest';
 
         const roomGroup = new THREE.Group();
         roomGroup.position.copy(worldOrigin);
@@ -2629,6 +3355,7 @@
             map: isAbyss ? texAbyss : texCarpet,
             bumpMap: isAbyss ? bumpAbyss : bumpCarpet,
             bumpScale: 0.045,
+            color: isOutdoors ? 0x132a18 : isMagma ? 0x1c1412 : 0xffffff,
             roughness: isAbyss ? 0.28 : 0.85,
             metalness: isAbyss ? 0.45 : 0.05
         });
@@ -2636,58 +3363,343 @@
             map: isAbyss ? texAbyss : texWall,
             bumpMap: isAbyss ? bumpWall : bumpWall,
             bumpScale: 0.05,
+            color: isOutdoors ? 0x0b1f10 : isMagma ? 0x2b120c : 0xffffff,
             roughness: 0.72,
             side: THREE.DoubleSide
         });
         const domeMat = new THREE.MeshStandardMaterial({
-            color: isAbyss ? 0x04112b : 0x16161e,
+            color: isAbyss ? 0x04112b : isOutdoors ? 0x06121e : isMagma ? 0x3b0d06 : 0x16161e,
             bumpMap: bumpWall,
             bumpScale: 0.03,
             roughness: 0.82,
-            side: THREE.BackSide
+            side: THREE.DoubleSide
         });
         const ribMat = new THREE.MeshStandardMaterial({ map: texWood, roughness: 0.5 });
 
         const roomObj = {
             roomNumber: roomNum,
+            bp,
             shapeType,
             group: roomGroup,
             worldOrigin: worldOrigin.clone(),
             worldYaw,
-            exitLocalPos: new THREE.Vector3(0, 0, -22),
-            exitLocalYaw: 0,
+            exitLocalPos: bp ? bp.exitLocalPos.clone() : new THREE.Vector3(0, 0, -22),
+            exitLocalYaw: bp ? bp.exitLocalYaw : 0,
             exitWorldPos: new THREE.Vector3(),
             exitWorldYaw: worldYaw,
             doorMesh: null,
             doorOpen: false,
-            colliders: []
+            colliders: [],
+            occupiedSpots: [],
+            treeCovers: [],
+            coolingVents: [],
+            mazeDoors: []
         };
 
-        if (shapeType === 'rotunda_round') {
+        if (shapeType === 'grand_library') {
+            // 5X MASSIVE TWO-STORY GRAND LIBRARY WITH UPPER MEZZANINE BALCONIES, STAIRCASES & TOWERING BOOKCASES
+            const length = 64;
+            const hallW = 24.0;
+            const wallH = 11.5;
+
+            const floor = new THREE.Mesh(new THREE.PlaneGeometry(hallW + 1, length + 1), floorMat);
+            floor.rotation.x = -Math.PI / 2;
+            floor.position.set(0, 0, -length / 2);
+            roomGroup.add(floor);
+
+            const roof = new THREE.Mesh(new THREE.CylinderGeometry(hallW / 2 + 0.5, hallW / 2 + 0.5, length + 1, 28, 1, true, 0, Math.PI), domeMat);
+            roof.rotation.z = Math.PI / 2;
+            roof.rotation.y = Math.PI / 2;
+            roof.position.set(0, wallH - 2.0, -length / 2);
+            roomGroup.add(roof);
+
+            const leftW = new THREE.Mesh(new THREE.BoxGeometry(0.45, wallH + 4, length + 2), wallMat);
+            leftW.position.set(-hallW / 2, (wallH + 4) / 2, -length / 2);
+            const rightW = new THREE.Mesh(new THREE.BoxGeometry(0.45, wallH + 4, length + 2), wallMat);
+            rightW.position.set(hallW / 2, (wallH + 4) / 2, -length / 2);
+            roomGroup.add(leftW, rightW);
+
+            buildPortalWall(roomGroup, hallW, wallH + 2, wallMat, 0, 0, 0);
+            buildPortalWall(roomGroup, hallW, wallH + 2, wallMat, 0, -length, 0);
+
+            roomObj.exitLocalPos.set(0, 0, -length);
+            roomObj.exitLocalYaw = 0;
+
+            // Ground floor collider + Second-Floor Mezzanine Walkways & Dual Grand Staircases
+            roomObj.colliders.push({ type: 'box', minX: -11.0, maxX: 11.0, minZ: -length, maxZ: 0 });
+
+            // Second-story mezzanine balconies along left & right walls + cross-bridges
+            [-8.5, 8.5].forEach(mx => {
+                const mezzFloor = new THREE.Mesh(new THREE.BoxGeometry(6.2, 0.35, length - 4), ribMat);
+                mezzFloor.position.set(mx, 4.4, -length / 2);
+                const rail = new THREE.Mesh(new THREE.BoxGeometry(0.18, 1.05, length - 4), ribMat);
+                rail.position.set(mx + (mx < 0 ? 3.0 : -3.0), 5.1, -length / 2);
+                roomGroup.add(mezzFloor, rail);
+            });
+            [-20, -44].forEach(bz => {
+                const bridge = new THREE.Mesh(new THREE.BoxGeometry(12.0, 0.35, 3.6), ribMat);
+                bridge.position.set(0, 4.4, bz);
+                roomGroup.add(bridge);
+            });
+
+            // Grand Staircases ascending to the 2nd floor
+            [-6.2, 6.2].forEach(sx => {
+                for (let st = 0; st < 16; st++) {
+                    const step = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.28, 0.45), ribMat);
+                    step.position.set(sx, 0.14 + st * 0.275, -8 - st * 0.42);
+                    roomGroup.add(step);
+                }
+            });
+
+            // Massive multi-aisle floor-to-ceiling mahogany bookcases (well clear of walls & aisles)
+            const bookColors = [0x7f1d1d, 0x1e3a8a, 0x14532d, 0x78350f, 0x581c87, 0x3f3f46];
+            for (let z = -10; z >= -54; z -= 8) {
+                [-9.6, -4.6, 4.6, 9.6].forEach(bx => {
+                    const shelfCase = new THREE.Mesh(new THREE.BoxGeometry(2.8, 9.2, 0.8), ribMat);
+                    shelfCase.position.set(bx, 4.6, z);
+                    roomGroup.add(shelfCase);
+                    registerSafeProp(roomObj, bx, z, 1.55);
+
+                    for (let row = 0; row < 8; row++) {
+                        for (let b = -4; b <= 4; b++) {
+                            const book = new THREE.Mesh(
+                                new THREE.BoxGeometry(0.24, 0.46, 0.58),
+                                new THREE.MeshStandardMaterial({ color: bookColors[(Math.abs(b) + row) % bookColors.length], roughness: 0.6 })
+                            );
+                            book.position.set(bx + b * 0.26, 0.75 + row * 1.05, z + 0.14);
+                            roomGroup.add(book);
+                        }
+                    }
+                });
+            }
+
+            // Library Cipher Desk near the exit door
+            const desk = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.98, 0.95), ribMat);
+            desk.position.set(2.8, 0.49, -length + 3.0);
+            roomGroup.add(desk);
+            registerSafeProp(roomObj, 2.8, -length + 3.0, 1.35);
+
+            state.interactables.push({
+                roomNumber: roomNum,
+                type: 'cipher_desk',
+                pos: localToWorld(roomObj, 2.8, 1.1, -length + 3.0),
+                label: 'Enter 4-Digit Library Cipher [E]'
+            });
+
+            [-12, -26, -40, -54].forEach(zPos => {
+                const pLight = new THREE.PointLight(0xfbbf24, 1.55, 32);
+                pLight.position.set(0, wallH - 1.0, zPos);
+                roomGroup.add(pLight);
+                state.roomLights.push({ light: pLight, baseIntensity: pLight.intensity });
+            });
+
+        } else if (shapeType === 'hunt_maze') {
+            // 7-ROOM MULTI-DOOR MEMORY HUNT LABYRINTH (LEFT, CENTER & RIGHT NUMBERED DOORS — WRONG DOORS KILL YOU!)
+            const length = 24;
+            const hallW = 15.0;
+            const wallH = 4.2;
+
+            const floor = new THREE.Mesh(new THREE.PlaneGeometry(hallW + 1, length + 1), floorMat);
+            floor.rotation.x = -Math.PI / 2;
+            floor.position.set(0, 0, -length / 2);
+            roomGroup.add(floor);
+
+            const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(hallW + 1, length + 1), domeMat);
+            ceiling.rotation.x = Math.PI / 2;
+            ceiling.position.set(0, wallH, -length / 2);
+            roomGroup.add(ceiling);
+
+            const leftW = new THREE.Mesh(new THREE.BoxGeometry(0.45, wallH + 1, length + 2), wallMat);
+            leftW.position.set(-hallW / 2, wallH / 2, -length / 2);
+            const rightW = new THREE.Mesh(new THREE.BoxGeometry(0.45, wallH + 1, length + 2), wallMat);
+            rightW.position.set(hallW / 2, wallH / 2, -length / 2);
+            roomGroup.add(leftW, rightW);
+
+            buildPortalWall(roomGroup, hallW, wallH, wallMat, 0, 0, 0);
+            // Far end wall with 3 Doorways side-by-side: Left (-4.6), Center (0), Right (+4.6)
+            const farWallTop = new THREE.Mesh(new THREE.BoxGeometry(hallW + 1, wallH - 2.75, 0.35), wallMat);
+            farWallTop.position.set(0, 2.75 + (wallH - 2.75) / 2, -length);
+            roomGroup.add(farWallTop);
+            [-7.1, -2.3, 2.3, 7.1].forEach(px => {
+                const pier = new THREE.Mesh(new THREE.BoxGeometry(2.8, wallH, 0.35), wallMat);
+                pier.position.set(px, wallH / 2, -length);
+                roomGroup.add(pier);
+            });
+
+            // Labyrinth maze divider partitions in the middle of the chamber
+            [-7.5, -15.5].forEach((mz, idx) => {
+                const mazeBaffle = new THREE.Mesh(new THREE.BoxGeometry(4.4, wallH, 0.45), wallMat);
+                mazeBaffle.position.set(idx === 0 ? -2.6 : 2.6, wallH / 2, mz);
+                roomGroup.add(mazeBaffle);
+            });
+
+            roomObj.exitLocalPos.set(0, 0, -length);
+            roomObj.exitLocalYaw = 0;
+            roomObj.colliders.push({ type: 'box', minX: -6.6, maxX: 6.6, minZ: -length, maxZ: 0 });
+
+            const huntPlan = bp?.questPlan || { realNext: roomNum + 1, slots: [roomNum + 2, roomNum + 1, roomNum + 3] };
+            const doorXPositions = [-4.6, 0, 4.6];
+
+            doorXPositions.forEach((dx, idx) => {
+                const slotNum = huntPlan.slots[idx];
+                const isReal = slotNum === huntPlan.realNext;
+                const numLabel = String(slotNum).padStart(3, '0');
+                const doorPivot = buildArchedDoorAssembly(roomGroup, numLabel, false, dx, -length, 0);
+
+                if (isReal) {
+                    roomObj.doorMesh = doorPivot;
+                    roomObj.exitLocalPos.set(dx, 0, -length);
+                }
+
+                state.interactables.push({
+                    roomNumber: roomNum,
+                    type: isReal ? 'door' : 'lethal_fake_door',
+                    roomObj,
+                    numLabel,
+                    pos: localToWorld(roomObj, dx, 1.4, -length + 0.8),
+                    label: `Open Door ${numLabel} [E]`
+                });
+            });
+
+            const pLight = new THREE.PointLight(0xef4444, 1.45, 24);
+            pLight.position.set(0, 3.6, -12);
+            roomGroup.add(pLight);
+            state.roomLights.push({ light: pLight, baseIntensity: pLight.intensity });
+
+        } else if (shapeType === 'outdoors_forest') {
+            // DOORS 81–100: MOONLIT OUTDOOR WOODLAND TRAIL WITH TREE COVER AGAINST GOLEMS & GOBLINS
+            const length = 26;
+            const trailW = 14.0;
+
+            const ground = new THREE.Mesh(new THREE.PlaneGeometry(trailW + 6, length + 2), floorMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.position.set(0, 0, -length / 2);
+            roomGroup.add(ground);
+
+            // Moonlit night sky canopy & glowing full moon
+            const skyCanopy = new THREE.Mesh(new THREE.CylinderGeometry(trailW, trailW, length + 2, 20, 1, true, 0, Math.PI), domeMat);
+            skyCanopy.rotation.z = Math.PI / 2;
+            skyCanopy.rotation.y = Math.PI / 2;
+            skyCanopy.position.set(0, 3.5, -length / 2);
+            roomGroup.add(skyCanopy);
+
+            const moon = new THREE.Mesh(new THREE.SphereGeometry(1.1, 16, 16), new THREE.MeshBasicMaterial({ color: 0xdbeafe }));
+            moon.position.set(3.5, 9.5, -length + 2);
+            roomGroup.add(moon);
+
+            // Stone ruin archways at start & end of woodland path
+            buildPortalWall(roomGroup, trailW + 4, 4.2, wallMat, 0, 0, 0);
+            buildPortalWall(roomGroup, trailW + 4, 4.2, wallMat, 0, -length, 0);
+
+            roomObj.exitLocalPos.set(0, 0, -length);
+            roomObj.exitLocalYaw = 0;
+            roomObj.colliders.push({ type: 'box', minX: -6.2, maxX: 6.2, minZ: -length, maxZ: 0 });
+
+            // Dense ancient oak/pine trees along path — standing behind their trunks conceals you from Golems & Goblins!
+            const barkMat = new THREE.MeshStandardMaterial({ map: texWood, color: 0x261710, roughness: 0.9 });
+            const foliageMat = new THREE.MeshStandardMaterial({ color: 0x0f2e18, roughness: 0.85 });
+
+            for (let tz = -4; tz >= -22; tz -= 4.5) {
+                [-4.8, -2.3, 2.3, 4.8].forEach((tx, idx) => {
+                    if (Math.abs(tx) < 2.5 && idx % 2 === 0) return;
+                    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.62, 6.5, 12), barkMat);
+                    trunk.position.set(tx, 3.25, tz);
+                    const crown = new THREE.Mesh(new THREE.ConeGeometry(2.1, 4.5, 10), foliageMat);
+                    crown.position.set(tx, 6.8, tz);
+                    roomGroup.add(trunk, crown);
+                    registerSafeProp(roomObj, tx, tz, 1.0);
+                    roomObj.treeCovers.push(localToWorld(roomObj, tx, 1.5, tz));
+                });
+            }
+
+            const moonLight = new THREE.PointLight(0x93c5fd, 1.45, 28);
+            moonLight.position.set(0, 7.5, -length / 2);
+            roomGroup.add(moonLight);
+            state.roomLights.push({ light: moonLight, baseIntensity: moonLight.intensity });
+
+        } else if (shapeType === 'magma_cavern') {
+            // POST-ABYSS VOLCANIC MAGMA CAVERN WITH GLOWING LAVA RIVERS & COOLING VENTS
+            const length = 24;
+            const hallW = 9.0;
+            const wallH = 5.2;
+
+            const floor = new THREE.Mesh(new THREE.PlaneGeometry(hallW + 1, length + 1), floorMat);
+            floor.rotation.x = -Math.PI / 2;
+            floor.position.set(0, 0, -length / 2);
+            roomGroup.add(floor);
+
+            // Molten magma channels flanking the central basalt walkway
+            const lavaMat = new THREE.MeshBasicMaterial({ color: 0xf97316 });
+            [-3.4, 3.4].forEach(lx => {
+                const lavaStream = new THREE.Mesh(new THREE.PlaneGeometry(1.6, length), lavaMat);
+                lavaStream.rotation.x = -Math.PI / 2;
+                lavaStream.position.set(lx, 0.02, -length / 2);
+                roomGroup.add(lavaStream);
+            });
+
+            const roof = new THREE.Mesh(new THREE.CylinderGeometry(hallW / 2 + 0.5, hallW / 2 + 0.5, length + 1, 20, 1, true, 0, Math.PI), domeMat);
+            roof.rotation.z = Math.PI / 2;
+            roof.rotation.y = Math.PI / 2;
+            roof.position.set(0, wallH - 1.5, -length / 2);
+            roomGroup.add(roof);
+
+            const leftW = new THREE.Mesh(new THREE.BoxGeometry(0.4, wallH + 2, length + 2), wallMat);
+            leftW.position.set(-hallW / 2, (wallH + 2) / 2, -length / 2);
+            const rightW = new THREE.Mesh(new THREE.BoxGeometry(0.4, wallH + 2, length + 2), wallMat);
+            rightW.position.set(hallW / 2, (wallH + 2) / 2, -length / 2);
+            roomGroup.add(leftW, rightW);
+
+            buildPortalWall(roomGroup, hallW, wallH, wallMat, 0, 0, 0);
+            buildPortalWall(roomGroup, hallW, wallH, wallMat, 0, -length, 0);
+
+            roomObj.exitLocalPos.set(0, 0, -length);
+            roomObj.exitLocalYaw = 0;
+            roomObj.colliders.push({ type: 'box', minX: -2.4, maxX: 2.4, minZ: -length, maxZ: 0 });
+
+            // Cryo-Steam Cooling Vents along the basalt bridge — stand near them to vent Volcanic Heat!
+            [-7, -16].forEach(vz => {
+                const ventBase = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.55, 0.65, 0.25, 16),
+                    new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0284c7, metalness: 0.8 })
+                );
+                ventBase.position.set(0, 0.125, vz);
+                const ventLight = new THREE.PointLight(0x38bdf8, 1.6, 6);
+                ventLight.position.set(0, 0.8, vz);
+                roomGroup.add(ventBase, ventLight);
+                roomObj.coolingVents.push(localToWorld(roomObj, 0, 1.5, vz));
+            });
+
+            const magmaLight = new THREE.PointLight(0xf97316, 1.8, 22);
+            magmaLight.position.set(0, 3.8, -length / 2);
+            roomGroup.add(magmaLight);
+            state.roomLights.push({ light: magmaLight, baseIntensity: magmaLight.intensity });
+
+        } else if (shapeType === 'rotunda_round') {
             const radius = 6.4;
             const centerZ = -7.5;
-            const wallH = 3.6;
+            const wallH = 3.8;
 
-            const floorDisc = new THREE.Mesh(new THREE.CircleGeometry(radius + 0.4, 24), floorMat);
+            const floorDisc = new THREE.Mesh(new THREE.CircleGeometry(radius + 0.8, 28), floorMat);
             floorDisc.rotation.x = -Math.PI / 2;
             floorDisc.position.set(0, 0, centerZ);
             floorDisc.receiveShadow = true;
             roomGroup.add(floorDisc);
 
-            const dome = new THREE.Mesh(new THREE.SphereGeometry(radius + 0.35, 24, 14, 0, Math.PI * 2, 0, Math.PI * 0.52), domeMat);
+            const dome = new THREE.Mesh(new THREE.SphereGeometry(radius + 0.75, 28, 16, 0, Math.PI * 2, 0, Math.PI * 0.55), domeMat);
             dome.scale.set(1, 0.65, 1);
-            dome.position.set(0, wallH - 0.2, centerZ);
+            dome.position.set(0, wallH - 0.3, centerZ);
             roomGroup.add(dome);
 
-            const segCount = 12;
+            // Continuous overlapping cylindrical masonry wall segments so zero gaps appear anywhere
+            const segCount = 16;
             for (let s = 0; s < segCount; s++) {
                 const ang = (s / segCount) * Math.PI * 2;
                 if (s === 0 || s === segCount / 2) continue;
                 const wx = Math.sin(ang) * radius;
                 const wz = centerZ + Math.cos(ang) * radius;
-                const segW = (2 * Math.PI * radius) / segCount + 0.25;
-                const wallSeg = new THREE.Mesh(new THREE.PlaneGeometry(segW, wallH), wallMat);
-                wallSeg.position.set(wx, wallH / 2, wz);
+                const segW = (2 * Math.PI * radius) / segCount + 0.85;
+                const wallSeg = new THREE.Mesh(new THREE.BoxGeometry(segW, wallH + 1.2, 0.32), wallMat);
+                wallSeg.position.set(wx, (wallH + 1.2) / 2, wz);
                 wallSeg.rotation.y = ang + Math.PI;
                 roomGroup.add(wallSeg);
 
@@ -2697,26 +3709,31 @@
                 roomGroup.add(rib);
             }
 
-            const entFloor = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 2.2), floorMat);
+            const entFloor = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 3.0), floorMat);
             entFloor.rotation.x = -Math.PI / 2;
             entFloor.position.set(0, 0, -0.6);
             roomGroup.add(entFloor);
 
-            buildPortalWall(roomGroup, 3.6, wallH, wallMat, 0, 0.2, 0);
-            buildPortalWall(roomGroup, 3.6, wallH, wallMat, 0, -14.2, 0);
+            buildPortalWall(roomGroup, 4.4, wallH, wallMat, 0, 0.2, 0);
+            buildPortalWall(roomGroup, 4.4, wallH, wallMat, 0, -14.2, 0);
 
             roomObj.exitLocalPos.set(0, 0, -14.2);
             roomObj.exitLocalYaw = 0;
             roomObj.colliders.push({ type: 'circle', cx: 0, cz: centerZ, maxR: radius - 0.75, portalHalfW: 0.95 });
 
-            const centerCol = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.72, wallH + 2.2, 18), ribMat);
-            centerCol.position.set(0, (wallH + 2.2) / 2, centerZ);
+            const centerCol = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.72, wallH + 2.4, 18), ribMat);
+            centerCol.position.set(0, (wallH + 2.4) / 2, centerZ);
             roomGroup.add(centerCol);
+            registerSafeProp(roomObj, 0, centerZ, 1.3);
 
             buildDynamicCloset(roomObj, -4.6, centerZ - 1.2, Math.PI * 0.42);
+            registerSafeProp(roomObj, -4.6, centerZ - 1.2, 1.45);
             buildDynamicCloset(roomObj, 4.6, centerZ + 1.2, -Math.PI * 0.58);
+            registerSafeProp(roomObj, 4.6, centerZ + 1.2, 1.45);
             buildInteractiveDresser(roomObj, -4.4, centerZ + 2.1, Math.PI * 0.65);
+            registerSafeProp(roomObj, -4.4, centerZ + 2.1, 1.35);
             buildInteractiveDresser(roomObj, 4.4, centerZ - 2.1, -Math.PI * 0.35);
+            registerSafeProp(roomObj, 4.4, centerZ - 2.1, 1.35);
 
             const pLight = new THREE.PointLight(isAbyss ? 0x0ea5e9 : 0xffedd5, isAbyss ? 0.9 : 1.35, 18);
             pLight.position.set(0, wallH + 1.2, centerZ);
@@ -2728,21 +3745,21 @@
             const baseW = 9.2;
             const apexH = 5.4;
 
-            const floor = new THREE.Mesh(new THREE.PlaneGeometry(baseW, length), floorMat);
+            const floor = new THREE.Mesh(new THREE.PlaneGeometry(baseW + 1, length + 1), floorMat);
             floor.rotation.x = -Math.PI / 2;
             floor.position.set(0, 0, -length / 2);
             floor.receiveShadow = true;
             roomGroup.add(floor);
 
-            const slopeLen = Math.hypot(baseW / 2, apexH);
+            const slopeLen = Math.hypot(baseW / 2, apexH) + 1.2;
             const slopeAngle = Math.atan2(baseW / 2, apexH);
 
-            const leftSlope = new THREE.Mesh(new THREE.PlaneGeometry(length, slopeLen), wallMat);
+            const leftSlope = new THREE.Mesh(new THREE.BoxGeometry(length + 2, slopeLen, 0.32), wallMat);
             leftSlope.position.set(-baseW / 4, apexH / 2, -length / 2);
             leftSlope.rotation.y = Math.PI / 2;
             leftSlope.rotation.x = slopeAngle;
 
-            const rightSlope = new THREE.Mesh(new THREE.PlaneGeometry(length, slopeLen), wallMat);
+            const rightSlope = new THREE.Mesh(new THREE.BoxGeometry(length + 2, slopeLen, 0.32), wallMat);
             rightSlope.position.set(baseW / 4, apexH / 2, -length / 2);
             rightSlope.rotation.y = -Math.PI / 2;
             rightSlope.rotation.x = slopeAngle;
@@ -2762,9 +3779,13 @@
             roomObj.colliders.push({ type: 'box', minX: -2.9, maxX: 2.9, minZ: -length, maxZ: 0 });
 
             buildDynamicCloset(roomObj, -2.55, -7, Math.PI / 2);
+            registerSafeProp(roomObj, -2.55, -7, 1.45);
             buildDynamicCloset(roomObj, 2.55, -13, -Math.PI / 2);
+            registerSafeProp(roomObj, 2.55, -13, 1.45);
             buildInteractiveDresser(roomObj, -2.65, -13.5, Math.PI / 2);
+            registerSafeProp(roomObj, -2.65, -13.5, 1.35);
             buildInteractiveDresser(roomObj, 2.65, -6.5, -Math.PI / 2);
+            registerSafeProp(roomObj, 2.65, -6.5, 1.35);
 
             const pLight = new THREE.PointLight(isAbyss ? 0x0ea5e9 : 0xffedd5, isAbyss ? 0.85 : 1.25, 18);
             pLight.position.set(0, apexH + 0.5, -length / 2);
@@ -2777,46 +3798,43 @@
             const barrelR = hallW / 2;
             const springH = 2.4;
 
-            const floor1 = new THREE.Mesh(new THREE.PlaneGeometry(hallW, 13.5), floorMat);
+            const floor1 = new THREE.Mesh(new THREE.PlaneGeometry(hallW + 0.8, 14.2), floorMat);
             floor1.rotation.x = -Math.PI / 2;
             floor1.position.set(0, 0, -6.75);
             roomGroup.add(floor1);
 
-            const vault1 = new THREE.Mesh(new THREE.CylinderGeometry(barrelR, barrelR, 13.5, 20, 1, true, 0, Math.PI), domeMat);
+            const vault1 = new THREE.Mesh(new THREE.CylinderGeometry(barrelR + 0.25, barrelR + 0.25, 14.2, 20, 1, true, 0, Math.PI), domeMat);
             vault1.rotation.z = Math.PI / 2;
             vault1.rotation.y = Math.PI / 2;
             vault1.position.set(0, springH, -6.75);
             roomGroup.add(vault1);
 
-            const outerW1 = new THREE.Mesh(new THREE.PlaneGeometry(13.5, springH + barrelR), wallMat);
-            outerW1.rotation.y = turnDir === 1 ? Math.PI / 2 : -Math.PI / 2;
-            outerW1.position.set(-turnDir * barrelR, (springH + barrelR) / 2, -6.75);
+            const outerW1 = new THREE.Mesh(new THREE.BoxGeometry(0.32, springH + barrelR + 1.5, 14.2), wallMat);
+            outerW1.position.set(-turnDir * barrelR, (springH + barrelR + 1.5) / 2, -6.75);
 
-            const innerW1 = new THREE.Mesh(new THREE.PlaneGeometry(8.1, springH + barrelR), wallMat);
-            innerW1.rotation.y = turnDir === 1 ? -Math.PI / 2 : Math.PI / 2;
-            innerW1.position.set(turnDir * barrelR, (springH + barrelR) / 2, -4.05);
+            const innerW1 = new THREE.Mesh(new THREE.BoxGeometry(0.32, springH + barrelR + 1.5, 8.5), wallMat);
+            innerW1.position.set(turnDir * barrelR, (springH + barrelR + 1.5) / 2, -4.05);
 
-            const cornerEndW = new THREE.Mesh(new THREE.PlaneGeometry(hallW, springH + barrelR), wallMat);
-            cornerEndW.position.set(0, (springH + barrelR) / 2, -13.5);
+            const cornerEndW = new THREE.Mesh(new THREE.BoxGeometry(hallW + 1.2, springH + barrelR + 1.5, 0.32), wallMat);
+            cornerEndW.position.set(0, (springH + barrelR + 1.5) / 2, -13.5);
             roomGroup.add(outerW1, innerW1, cornerEndW);
 
             const leg2CenterZ = -10.8;
-            const floor2 = new THREE.Mesh(new THREE.PlaneGeometry(11.5, hallW), floorMat);
+            const floor2 = new THREE.Mesh(new THREE.PlaneGeometry(12.2, hallW + 0.8), floorMat);
             floor2.rotation.x = -Math.PI / 2;
             floor2.position.set(turnDir * 6.75, 0, leg2CenterZ);
             roomGroup.add(floor2);
 
-            const vault2 = new THREE.Mesh(new THREE.CylinderGeometry(barrelR, barrelR, 11.5, 20, 1, true, 0, Math.PI), domeMat);
+            const vault2 = new THREE.Mesh(new THREE.CylinderGeometry(barrelR + 0.25, barrelR + 0.25, 12.2, 20, 1, true, 0, Math.PI), domeMat);
             vault2.rotation.z = Math.PI / 2;
             vault2.position.set(turnDir * 6.75, springH, leg2CenterZ);
             roomGroup.add(vault2);
 
-            const northW2 = new THREE.Mesh(new THREE.PlaneGeometry(11.5, springH + barrelR), wallMat);
-            northW2.position.set(turnDir * 6.75, (springH + barrelR) / 2, leg2CenterZ - barrelR);
+            const northW2 = new THREE.Mesh(new THREE.BoxGeometry(12.2, springH + barrelR + 1.5, 0.32), wallMat);
+            northW2.position.set(turnDir * 6.75, (springH + barrelR + 1.5) / 2, leg2CenterZ - barrelR);
 
-            const southW2 = new THREE.Mesh(new THREE.PlaneGeometry(11.5, springH + barrelR), wallMat);
-            southW2.rotation.y = Math.PI;
-            southW2.position.set(turnDir * 6.75, (springH + barrelR) / 2, leg2CenterZ + barrelR);
+            const southW2 = new THREE.Mesh(new THREE.BoxGeometry(12.2, springH + barrelR + 1.5, 0.32), wallMat);
+            southW2.position.set(turnDir * 6.75, (springH + barrelR + 1.5) / 2, leg2CenterZ + barrelR);
             roomGroup.add(northW2, southW2);
 
             buildPortalWall(roomGroup, hallW, springH + barrelR, wallMat, 0, 0, 0);
@@ -2838,8 +3856,11 @@
             );
 
             buildDynamicCloset(roomObj, -turnDir * 2.05, -6.5, turnDir === 1 ? Math.PI / 2 : -Math.PI / 2);
+            registerSafeProp(roomObj, -turnDir * 2.05, -6.5, 1.45);
             buildInteractiveDresser(roomObj, turnDir * 6.8, leg2CenterZ - 2.15, 0);
+            registerSafeProp(roomObj, turnDir * 6.8, leg2CenterZ - 2.15, 1.35);
             buildDynamicCloset(roomObj, turnDir * 9.5, leg2CenterZ + 2.05, Math.PI);
+            registerSafeProp(roomObj, turnDir * 9.5, leg2CenterZ + 2.05, 1.45);
 
             const pLight1 = new THREE.PointLight(isAbyss ? 0x0ea5e9 : 0xffedd5, isAbyss ? 0.8 : 1.2, 16);
             pLight1.position.set(0, springH + 1.4, -7.5);
@@ -2854,25 +3875,24 @@
             const barrelR = hallW / 2;
             const springH = 2.4;
 
-            const floor = new THREE.Mesh(new THREE.PlaneGeometry(hallW, length), floorMat);
+            const floor = new THREE.Mesh(new THREE.PlaneGeometry(hallW + 1, length + 1), floorMat);
             floor.rotation.x = -Math.PI / 2;
             floor.position.set(0, 0, -length / 2);
             floor.receiveShadow = true;
             roomGroup.add(floor);
 
-            const vault = new THREE.Mesh(new THREE.CylinderGeometry(barrelR, barrelR, length, 24, 1, true, 0, Math.PI), domeMat);
+            const vault = new THREE.Mesh(new THREE.CylinderGeometry(barrelR + 0.25, barrelR + 0.25, length + 1, 24, 1, true, 0, Math.PI), domeMat);
             vault.rotation.z = Math.PI / 2;
             vault.rotation.y = Math.PI / 2;
             vault.position.set(0, springH, -length / 2);
             roomGroup.add(vault);
 
-            const leftW = new THREE.Mesh(new THREE.PlaneGeometry(length, springH + barrelR), wallMat);
-            leftW.rotation.y = Math.PI / 2;
-            leftW.position.set(-barrelR, (springH + barrelR) / 2, -length / 2);
+            // Thick solid masonry side walls with zero hairline seams
+            const leftW = new THREE.Mesh(new THREE.BoxGeometry(0.35, springH + barrelR + 1.5, length + 1.5), wallMat);
+            leftW.position.set(-barrelR, (springH + barrelR + 1.5) / 2, -length / 2);
 
-            const rightW = new THREE.Mesh(new THREE.PlaneGeometry(length, springH + barrelR), wallMat);
-            rightW.rotation.y = -Math.PI / 2;
-            rightW.position.set(barrelR, (springH + barrelR) / 2, -length / 2);
+            const rightW = new THREE.Mesh(new THREE.BoxGeometry(0.35, springH + barrelR + 1.5, length + 1.5), wallMat);
+            rightW.position.set(barrelR, (springH + barrelR + 1.5) / 2, -length / 2);
             roomGroup.add(leftW, rightW);
 
             for (let z = -4; z >= -18; z -= 4.6) {
@@ -2889,9 +3909,13 @@
             roomObj.colliders.push({ type: 'box', minX: -2.75, maxX: 2.75, minZ: -length, maxZ: 0 });
 
             buildDynamicCloset(roomObj, -2.75, -7.2, Math.PI / 2);
+            registerSafeProp(roomObj, -2.75, -7.2, 1.45);
             buildDynamicCloset(roomObj, 2.75, -14.8, -Math.PI / 2);
+            registerSafeProp(roomObj, 2.75, -14.8, 1.45);
             buildInteractiveDresser(roomObj, -2.85, -13.5, Math.PI / 2);
+            registerSafeProp(roomObj, -2.85, -13.5, 1.35);
             buildInteractiveDresser(roomObj, 2.85, -7.8, -Math.PI / 2);
+            registerSafeProp(roomObj, 2.85, -7.8, 1.35);
 
             [-6, -15].forEach(zPos => {
                 const pLight = new THREE.PointLight(isAbyss ? 0x0ea5e9 : 0xffedd5, isAbyss ? 0.8 : 1.2, 16);
@@ -2904,32 +3928,35 @@
         roomObj.exitWorldPos = localToWorld(roomObj, roomObj.exitLocalPos.x, 0, roomObj.exitLocalPos.z);
         roomObj.exitWorldYaw = roomObj.worldYaw + roomObj.exitLocalYaw;
 
-        const currDoorText = isAbyss ? `${roomNum}` : String(roomNum).padStart(3, '0');
-        const nextDoorText = isAbyss ? (roomNum + 1 === 0 ? '000' : `${roomNum + 1}`) : String(roomNum + 1).padStart(3, '0');
-        const nextLabel = isAbyss ? (roomNum + 1 === 0 ? 'SURFACE' : `DEPTH ${roomNum + 1}`) : `DOOR ${nextDoorText}`;
+        if (shapeType !== 'hunt_maze') {
+            const currDoorText = isAbyss ? `${roomNum}` : String(roomNum).padStart(3, '0');
+            const nextDoorText = isAbyss ? (roomNum + 1 === 0 ? '000' : `${roomNum + 1}`) : String(roomNum + 1).padStart(3, '0');
+            const nextLabel = isAbyss ? (roomNum + 1 === 0 ? 'SURFACE' : `DEPTH ${roomNum + 1}`) : `DOOR ${nextDoorText}`;
 
-        roomObj.doorMesh = buildArchedDoorAssembly(
-            roomGroup,
-            currDoorText,
-            isAbyss,
-            roomObj.exitLocalPos.x,
-            roomObj.exitLocalPos.z,
-            roomObj.exitLocalYaw
-        );
+            roomObj.doorMesh = buildArchedDoorAssembly(
+                roomGroup,
+                currDoorText,
+                isAbyss,
+                roomObj.exitLocalPos.x,
+                roomObj.exitLocalPos.z,
+                roomObj.exitLocalYaw,
+                exitDoorStyle
+            );
 
-        const doorWorldInteractPos = localToWorld(
-            roomObj,
-            roomObj.exitLocalPos.x + Math.sin(roomObj.exitLocalYaw) * 0.75,
-            1.4,
-            roomObj.exitLocalPos.z + Math.cos(roomObj.exitLocalYaw) * 0.75
-        );
-        state.interactables.push({
-            roomNumber: roomNum,
-            type: 'door',
-            roomObj,
-            pos: doorWorldInteractPos,
-            label: `Open ${nextLabel} [E]`
-        });
+            const doorWorldInteractPos = localToWorld(
+                roomObj,
+                roomObj.exitLocalPos.x + Math.sin(roomObj.exitLocalYaw) * 0.75,
+                1.4,
+                roomObj.exitLocalPos.z + Math.cos(roomObj.exitLocalYaw) * 0.75
+            );
+            state.interactables.push({
+                roomNumber: roomNum,
+                type: 'door',
+                roomObj,
+                pos: doorWorldInteractPos,
+                label: `Open ${nextLabel} [E]`
+            });
+        }
 
         state.activeRooms.push(roomObj);
         return roomObj;
@@ -2939,178 +3966,238 @@
         state.currentRoomObj = roomObj;
         state.roomNumber = roomObj.roomNumber;
         const isAbyss = state.mode === 'abyss';
+        const isMagma = state.mode === 'magma';
+        const isOutdoors = roomObj.shapeType === 'outdoors_forest';
         const absRoom = Math.abs(roomObj.roomNumber);
 
-        scene.fog.color.setHex(isAbyss ? 0x03081a : 0x07070c);
-        scene.fog.density = isAbyss ? 0.038 : (state.difficulty === 'abyssal' ? 0.036 : 0.024);
+        scene.fog.color.setHex(isAbyss ? 0x03081a : isMagma ? 0x260802 : isOutdoors ? 0x05101a : 0x07070c);
+        scene.fog.density = isAbyss ? 0.038 : isMagma ? 0.028 : (state.difficulty === 'abyssal' ? 0.036 : 0.022);
 
         state.activeEntities.forEach(ent => worldGroup.remove(ent.mesh));
         state.activeEntities = [];
         document.getElementById('entity-sign-banner').classList.add('hidden');
 
-        const questRoll = Math.random();
-        if (isAbyss) {
-            const orbGoal = 3;
+        if (adminState.explorerMode) {
+            state.quest = { type: 'none', completed: true, collected: 0, required: 0, hasKey: false };
+            updateHUD();
+            return;
+        }
+
+        if (roomObj.shapeType === 'omen_library') {
+            showToast('📖 ORNATE GILDED DOOR: The 5-Story Grand Library lies directly ahead!', 'warning');
+        } else if (roomObj.shapeType === 'omen_hunt') {
+            showToast(`🖤 BLACK OMEN DOOR: A 7-Room Labyrinth (${roomObj.roomNumber + 1} → 43) awaits! Remember each door number—wrong doors kill you!`, 'danger');
+        }
+
+        const qPlan = roomObj.bp?.questPlan || { type: 'none' };
+        if (qPlan.type === 'library_cipher') {
+            state.quest = {
+                type: 'library_cipher',
+                completed: false,
+                collected: 0,
+                required: 4,
+                hasKey: false,
+                cipherCode: qPlan.code,
+                foundBooks: ['?', '?', '?', '?']
+            };
+
+            const roman = ['I', 'II', 'III', 'IV'];
+            const bookSpots = [
+                { x: -7.9, z: -14.0 },
+                { x: 7.9, z: -26.0 },
+                { x: -7.9, z: -38.0 },
+                { x: 7.9, z: -50.0 }
+            ];
+            bookSpots.forEach((sp, idx) => {
+                const tome = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.36, 0.48, 0.16),
+                    new THREE.MeshStandardMaterial({ color: 0xf59e0b, emissive: 0xd97706, emissiveIntensity: 0.9 })
+                );
+                tome.position.set(sp.x, 1.4, sp.z);
+                const glow = new THREE.PointLight(0xfbbf24, 1.5, 5.5);
+                tome.add(glow);
+                roomObj.group.add(tome);
+
+                state.interactables.push({
+                    roomNumber: roomObj.roomNumber,
+                    type: 'library_book',
+                    bookIndex: idx,
+                    romanNum: roman[idx],
+                    digit: qPlan.digits[idx],
+                    mesh: tome,
+                    pos: localToWorld(roomObj, sp.x, 1.4, sp.z),
+                    label: `Inspect Tome ${roman[idx]} [E]`
+                });
+            });
+
+            const libMesh = buildEntityModel('librarian');
+            libMesh.position.copy(localToWorld(roomObj, 0, 0, -32));
+            worldGroup.add(libMesh);
+            state.activeEntities.push({
+                type: 'librarian',
+                roomObj,
+                mesh: libMesh,
+                patrolAngle: 0,
+                speed: 2.5
+            });
+            const banner = document.getElementById('entity-sign-banner');
+            banner.textContent = '🤫 THE LIBRARIAN IS BLIND — PRESS [C] TO CROUCH SILENTLY & COLLECT 4 NUMBERED TOMES!';
+            banner.classList.remove('hidden');
+
+        } else if (qPlan.type === 'hunt_maze') {
+            state.quest = {
+                type: 'hunt_maze',
+                completed: true,
+                collected: 0,
+                required: 1,
+                hasKey: false
+            };
+            const houndMesh = buildEntityModel('hound');
+            houndMesh.position.copy(localToWorld(roomObj, 0, 0, -1.8));
+            worldGroup.add(houndMesh);
+            state.activeEntities.push({
+                type: 'hound',
+                mesh: houndMesh,
+                speed: state.difficulty === 'normal' ? 3.2 : 4.1
+            });
+            const banner = document.getElementById('entity-sign-banner');
+            banner.textContent = `🏃 LABYRINTH ROOM ${roomObj.roomNumber}/43 — OPEN DOOR ${String(roomObj.roomNumber + 1).padStart(3, '0')}! (WRONG DOORS ARE FATAL)`;
+            banner.classList.remove('hidden');
+
+        } else if (roomObj.shapeType === 'outdoors_forest') {
+            state.quest = { type: 'none', completed: true, collected: 0, required: 0, hasKey: false };
+            const isGolem = Math.random() > 0.45;
+            const monsterType = isGolem ? 'golem' : 'goblin';
+            const fMesh = buildEntityModel(monsterType);
+            fMesh.position.copy(localToWorld(roomObj, 0, 0, -22));
+            worldGroup.add(fMesh);
+            state.activeEntities.push({
+                type: monsterType,
+                roomObj,
+                mesh: fMesh,
+                speed: isGolem ? 2.5 : 4.2
+            });
+            const banner = document.getElementById('entity-sign-banner');
+            banner.textContent = isGolem
+                ? '🌲 MOSS GOLEM APPROACHING — STAND BEHIND A TREE TRUNK TO HIDE!'
+                : '🗡️ FOREST GOBLIN PROWLING — HIDE BEHIND TREES OR BURN WITH LIGHT!';
+            banner.classList.remove('hidden');
+
+        } else if (isMagma) {
+            state.quest = { type: 'none', completed: true, collected: 0, required: 0, hasKey: false };
+            if (Math.random() < 0.65) {
+                const mfMesh = buildEntityModel('magma_fiend');
+                mfMesh.position.copy(localToWorld(roomObj, 0, 0, -18));
+                worldGroup.add(mfMesh);
+                state.activeEntities.push({
+                    type: 'magma_fiend',
+                    mesh: mfMesh,
+                    hp: 120,
+                    speed: 2.9
+                });
+            }
+        } else if (qPlan.type === 'abyss_orbs') {
+            const orbGoal = qPlan.required || 3;
             state.quest = { type: 'abyss_orbs', completed: false, collected: 0, required: orbGoal, hasKey: false };
             for (let i = 0; i < orbGoal + 1; i++) {
                 const wPos = localToWorld(roomObj, (Math.random() - 0.5) * 2.2, 1.15, -4.0 - i * 2.5);
                 spawnLightOrb(wPos);
             }
-        } else if (absRoom > 1 && questRoll < 0.34) {
+        } else if (qPlan.type === 'lever') {
             state.quest = { type: 'lever', completed: false, collected: 0, required: 1, hasKey: false };
-            const leverGroup = new THREE.Group();
-            leverGroup.position.set(-2.2, 1.35, -5.5);
-
-            const boxBase = new THREE.Mesh(
-                new THREE.BoxGeometry(0.32, 0.48, 0.22),
-                new THREE.MeshStandardMaterial({ color: 0x27272a, metalness: 0.8, roughness: 0.3 })
-            );
-            const leverArm = new THREE.Mesh(
-                new THREE.CylinderGeometry(0.04, 0.04, 0.65, 12),
-                new THREE.MeshStandardMaterial({ color: 0xdc2626, emissive: 0x991b1b, metalness: 0.88, roughness: 0.2 })
-            );
-            leverArm.rotation.x = -0.65;
-            leverArm.position.set(0, 0.22, 0.12);
-            const handleBall = new THREE.Mesh(
-                new THREE.SphereGeometry(0.08, 16, 16),
-                new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xef4444, emissiveIntensity: 0.7 })
-            );
-            handleBall.position.set(0, 0.5, 0.28);
-
-            leverGroup.add(boxBase, leverArm, handleBall);
-            roomObj.group.add(leverGroup);
+            const genMesh = createDetailedGeneratorMesh();
+            const gx = qPlan.x || 0;
+            const gz = qPlan.z || -10.5;
+            genMesh.position.set(gx, 0, gz);
+            roomObj.group.add(genMesh);
 
             state.interactables.push({
                 roomNumber: roomObj.roomNumber,
                 type: 'lever',
-                mesh: handleBall,
-                pos: localToWorld(roomObj, -2.2, 1.75, -5.3),
-                label: 'Pull Power Lever [E]'
+                mesh: genMesh.userData.statusOrb,
+                leverPivot: genMesh.userData.leverPivot,
+                pos: localToWorld(roomObj, gx, 1.15, gz),
+                label: 'Activate Circuit Generator [E]'
             });
-        } else if (absRoom > 2 && questRoll < 0.62) {
+        } else if (qPlan.type === 'key') {
             state.quest = { type: 'key', completed: false, collected: 0, required: 1, hasKey: false };
-            const keyGroup = new THREE.Group();
-            keyGroup.position.set(0, 0.95, -6.5);
-
-            const ring = new THREE.Mesh(
-                new THREE.TorusGeometry(0.12, 0.035, 10, 20),
-                new THREE.MeshStandardMaterial({ color: 0xf59e0b, emissive: 0xd97706, metalness: 0.95, roughness: 0.15 })
-            );
-            ring.rotation.x = Math.PI / 2;
-            const shaft = new THREE.Mesh(
-                new THREE.CylinderGeometry(0.028, 0.028, 0.36, 12),
-                new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.95, roughness: 0.15 })
-            );
-            shaft.rotation.z = Math.PI / 2;
-            shaft.position.set(0.22, 0, 0);
-            const teeth1 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.09, 0.028), new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.95 }));
-            teeth1.position.set(0.34, -0.05, 0);
-
-            keyGroup.add(ring, shaft, teeth1);
+            const keyGroup = createDetailedKeyMesh();
+            const kx = qPlan.x || 0;
+            const kz = qPlan.z || -7.5;
+            keyGroup.position.set(kx, 1.05, kz);
             roomObj.group.add(keyGroup);
 
             state.interactables.push({
                 roomNumber: roomObj.roomNumber,
                 type: 'key',
                 mesh: keyGroup,
-                pos: localToWorld(roomObj, 0, 0.95, -6.5),
-                label: 'Pick Up Ornate Brass Key [E]'
+                pos: localToWorld(roomObj, kx, 1.05, kz),
+                label: 'Pick Up Ornate Skeleton Key [E]'
             });
         } else {
             state.quest = { type: 'none', completed: true, collected: 0, required: 0, hasKey: false };
         }
 
         const diffChance = state.difficulty === 'normal' ? 0.36 : state.difficulty === 'nightmare' ? 0.55 : 0.72;
-        if (absRoom > 1 && Math.random() < diffChance) {
+        if (!isMagma && !isOutdoors && roomObj.shapeType !== 'grand_library' && roomObj.shapeType !== 'hunt_maze' && absRoom > 1 && Math.random() < diffChance) {
             scheduleEntitySpawn(roomObj);
         }
 
         updateHUD();
     }
 
+    // Maintains a strict rolling window of [currentRoom - 3, currentRoom + 3]:
+    // Opening a door generates ahead up to +3, and degenerates anything > 3 rooms behind!
+    function syncPrebuiltRoomWindow(centerRoomNum) {
+        const modeMap = state.prebuiltBlueprints[state.mode];
+        if (!modeMap) return;
+
+        const minKeep = centerRoomNum - 3;
+        const maxKeep = centerRoomNum + 3;
+
+        // Degenerate rooms more than 3 doors behind (or outside window)
+        for (let i = state.activeRooms.length - 1; i >= 0; i--) {
+            const rObj = state.activeRooms[i];
+            if (rObj.roomNumber < minKeep || rObj.roomNumber > maxKeep) {
+                worldGroup.remove(rObj.group);
+                state.interactables = state.interactables.filter(it => it.roomNumber !== rObj.roomNumber);
+                state.activeRooms.splice(i, 1);
+            }
+        }
+
+        // Generate any missing prebuilt rooms inside [minKeep, maxKeep]
+        for (let r = minKeep; r <= maxKeep; r++) {
+            const bp = modeMap[r];
+            if (!bp) continue;
+            const alreadyLoaded = state.activeRooms.some(ar => ar.roomNumber === r);
+            if (!alreadyLoaded) {
+                createRoomSegment(r, bp.worldOrigin, bp.worldYaw);
+            }
+        }
+        state.activeRooms.sort((a, b) => a.roomNumber - b.roomNumber);
+    }
+
     function buildSeamlessChainFrom(startRoomNum) {
         clearWorld();
-        const firstRoom = createRoomSegment(startRoomNum, new THREE.Vector3(0, 0, 0), 0);
-        createRoomSegment(startRoomNum + 1, firstRoom.exitWorldPos, firstRoom.exitWorldYaw);
+        if (!state.prebuiltBlueprints[state.mode]) prebuildAllBlueprints();
+        syncPrebuiltRoomWindow(startRoomNum);
 
-        playerPos.set(0, 1.68, -1.2);
-        playerRot.yaw = 0;
-        activateRoomGameplay(firstRoom);
-    }
-
-    function spawnLightOrb(worldPos) {
-        const orb = new THREE.Mesh(
-            new THREE.SphereGeometry(0.24, 16, 16),
-            new THREE.MeshBasicMaterial({ color: 0x38bdf8 })
-        );
-        orb.position.copy(worldPos);
-        const glow = new THREE.PointLight(0x38bdf8, 1.8, 6);
-        orb.add(glow);
-        worldGroup.add(orb);
-        state.pickups.push({ type: 'orb', mesh: orb });
-    }
-
-    function scheduleEntitySpawn(roomObj) {
-        const types = ['rusher', 'watcher', 'stalker'];
-        const chosen = types[Math.floor(Math.random() * types.length)];
-        const banner = document.getElementById('entity-sign-banner');
-
-        if (chosen === 'rusher') {
-            sfx.playWarningCue('rusher');
-            banner.textContent = '⚠️ THE LIGHTS ARE FLICKERING — HIDE IN A CLOSET NOW!';
-            banner.classList.remove('hidden');
-
-            setTimeout(() => {
-                if (!state.isPlaying || state.currentRoomObj !== roomObj) return;
-                const mesh = buildEntityModel('rusher');
-                const startWorld = localToWorld(roomObj, 0, 0, -0.8);
-                mesh.position.copy(startWorld);
-                mesh.rotation.y = roomObj.worldYaw + Math.PI;
-                worldGroup.add(mesh);
-                state.activeEntities.push({
-                    type: 'rusher',
-                    roomObj,
-                    mesh,
-                    localZ: -0.8,
-                    speed: state.difficulty === 'normal' ? 13 : 18
-                });
-            }, 2200);
-        } else if (chosen === 'watcher') {
-            sfx.playWarningCue('watcher');
-            banner.textContent = '👁️ WHISPERS IN THE DARK — DO NOT LOOK AT IT!';
-            banner.classList.remove('hidden');
-
-            const mesh = buildEntityModel('watcher');
-            mesh.position.copy(localToWorld(roomObj, (Math.random() - 0.5) * 2.4, 0, -10));
-            worldGroup.add(mesh);
-            state.activeEntities.push({
-                type: 'watcher',
-                mesh,
-                stareTime: 0,
-                life: 7.5
-            });
-        } else {
-            sfx.playWarningCue('stalker');
-            banner.textContent = '🔦 FOOTSTEPS BEHIND YOU — OVERCHARGE LIGHT [RMB] TO BURN IT!';
-            banner.classList.remove('hidden');
-
-            const mesh = buildEntityModel('stalker');
-            mesh.position.copy(localToWorld(roomObj, (Math.random() - 0.5) * 2.2, 0, -1.2));
-            worldGroup.add(mesh);
-            state.activeEntities.push({
-                type: 'stalker',
-                mesh,
-                hp: 100,
-                speed: state.difficulty === 'normal' ? 2.6 : 3.6
-            });
+        const firstRoom = state.activeRooms.find(r => r.roomNumber === startRoomNum);
+        if (firstRoom) {
+            const spawnWorld = localToWorld(firstRoom, 0, 1.68, -1.2);
+            playerPos.copy(spawnWorld);
+            playerRot.yaw = firstRoom.worldYaw;
+            activateRoomGameplay(firstRoom);
         }
     }
 
-    // ==================== 11. INPUT HANDLING (DESKTOP + MOBILE/TABLET TOUCH) ====================
+    // ==================== 11. PLAYER CONTROLS & INPUT (DESKTOP + MOBILE) ====================
+    const playerPos = new THREE.Vector3(0, 1.68, -1.2);
+    const playerRot = { yaw: 0, pitch: 0 };
     const keys = {};
     let isPointerLocked = false;
-    const touchMove = { active: false, id: null, startX: 0, startY: 0, dx: 0, dy: 0 };
-    const touchLook = { active: false, id: null, lastX: 0, lastY: 0 };
+    let touchMove = { active: false, id: null, startX: 0, startY: 0, dx: 0, dy: 0 };
+    let touchLook = { active: false, id: null, lastX: 0, lastY: 0 };
 
     window.addEventListener('keydown', e => {
         keys[e.code] = true;
@@ -3118,6 +4205,7 @@
 
         if (e.code === 'KeyF') toggleFlashlight();
         if (e.code === 'KeyE') triggerInteract();
+        if (e.code === 'KeyC' && !adminState.flyMode) toggleCrouch();
         if (e.code === 'Digit1') usePotion('speed');
         if (e.code === 'Digit2') usePotion('invis');
         if (e.code === 'Escape') pauseToMenu();
@@ -3130,7 +4218,7 @@
     canvas.addEventListener('mousedown', e => {
         if (!state.isPlaying) return;
         sfx.init();
-        if (!isPointerLocked && !isMobileMode && canvas.requestPointerLock) {
+        if (!isMobileMode && !isPointerLocked && canvas.requestPointerLock) {
             try { canvas.requestPointerLock(); } catch (err) {}
         }
         if (e.button === 2) state.combatBeam = true;
@@ -3238,10 +4326,12 @@
         playerRig.visible = true;
         document.getElementById('main-menu').classList.add('hidden');
         document.getElementById('gameover-modal').classList.add('hidden');
+        document.getElementById('cutscene-overlay').classList.add('hidden');
         document.getElementById('game-hud').classList.remove('hidden');
         applyDeviceModeUI();
 
         state.isPlaying = true;
+        state.isCrouching = false;
         state.sessionCoins = 0;
         const accBonusHp = saveData.equippedAccessory === 'crimson_band' ? 20 : 0;
         state.maxHp = 100 + saveData.upgrades.vitality * 15 + accBonusHp;
@@ -3252,11 +4342,16 @@
         state.stamina = state.maxStamina;
         state.battery = 100;
         state.abyssLight = 100;
+        state.magmaHeat = 0;
         state.buffs = { speed: 0, invis: 0 };
 
         if (state.mode === 'abyss') {
             state.roomNumber = -100;
             document.getElementById('abyss-overlay').style.opacity = '1';
+            document.getElementById('hud-abyss-meter').classList.remove('hidden');
+        } else if (state.mode === 'magma') {
+            state.roomNumber = 1;
+            document.getElementById('abyss-overlay').style.opacity = '0';
             document.getElementById('hud-abyss-meter').classList.remove('hidden');
         } else {
             state.roomNumber = 1;
@@ -3267,6 +4362,34 @@
         updatePlayerEquipmentVisuals();
         buildSeamlessChainFrom(state.roomNumber);
 
+        if (!isMobileMode && canvas.requestPointerLock) {
+            try { canvas.requestPointerLock(); } catch (err) {}
+        }
+    }
+
+    function toggleCrouch() {
+        if (!state.isPlaying || state.isHiding) return;
+        state.isCrouching = !state.isCrouching;
+        sfx.playClick(state.isCrouching ? 320 : 480);
+        showToast(state.isCrouching ? '🤫 Crouching (Silent Footsteps)' : 'Standing Up', 'info');
+    }
+
+    function submitLibraryCipher() {
+        const val = document.getElementById('cipher-input').value.trim();
+        if (val === state.quest.cipherCode) {
+            state.quest.completed = true;
+            closeCipherModal();
+            sfx.playCoinOrOrb(true);
+            showToast('📖 ANCIENT CIPHER ACCEPTED! The Library Exit is unsealed!', 'success');
+            updateHUD();
+        } else {
+            sfx.playClick(180);
+            showToast('❌ Wrong 4-digit tome sequence! Check the glowing books.', 'danger');
+        }
+    }
+
+    function closeCipherModal() {
+        document.getElementById('cipher-modal').classList.add('hidden');
         if (!isMobileMode && canvas.requestPointerLock) {
             try { canvas.requestPointerLock(); } catch (err) {}
         }
@@ -3353,51 +4476,55 @@
             if (dData.opened) return;
             dData.opened = true;
             sfx.playDrawerSlide();
-
             if (dData.lootType === 'coins') {
-                const gain = 12 + Math.floor(Math.random() * 14);
-                saveData.coins += gain;
-                state.sessionCoins += gain;
+                const found = 15 + Math.floor(Math.random() * 20);
+                saveData.coins += found;
+                state.sessionCoins += found;
                 persistSave();
                 sfx.playCoinOrOrb(false);
-                showToast(`🪙 Found +${gain} Soul Coins in drawer!`, 'success');
-                setTimeout(() => { if (dData.lootMesh) dData.lootMesh.visible = false; }, 350);
+                showToast(`🪙 Found ${found} Soul Coins inside drawer!`, 'success');
             } else if (dData.lootType === 'battery') {
-                state.battery = Math.min(100, state.battery + 45);
+                state.battery = Math.min(100, state.battery + 40);
                 sfx.playCoinOrOrb(true);
-                showToast('🔋 Found Lithium Battery Cell (+45% Charge)!', 'success');
-                setTimeout(() => { if (dData.lootMesh) dData.lootMesh.visible = false; }, 350);
+                showToast('🔋 Found Fresh Lithium Battery (+40%)!', 'info');
             } else if (dData.lootType === 'potion') {
                 const pKey = Math.random() > 0.5 ? 'speed' : 'invis';
-                saveData.potions[pKey]++;
+                saveData.potions[pKey] = (saveData.potions[pKey] || 0) + 1;
                 persistSave();
                 sfx.playCoinOrOrb(true);
                 showToast(`🧪 Found a ${pKey === 'speed' ? 'Speed' : 'Invisibility'} Potion!`, 'success');
-                setTimeout(() => { if (dData.lootMesh) dData.lootMesh.visible = false; }, 350);
-            } else if (dData.lootType === 'mimic') {
-                sfx.playJumpscare();
-                document.getElementById('damage-overlay').style.opacity = '0.9';
-                setTimeout(() => { document.getElementById('damage-overlay').style.opacity = '0'; }, 450);
-                if (!adminState.godMode) {
-                    state.hp -= 24;
-                    if (state.hp <= 0) {
-                        triggerDeath('A Drawer Mimic latched onto your throat!', '🕷️');
-                        return;
-                    }
-                }
-                showToast('🕷️ AMBUSH MIMIC! -24 Vitality!', 'danger');
-                setTimeout(() => { if (dData.lootMesh) dData.lootMesh.visible = false; }, 350);
+            } else if (dData.lootType === 'mimic' && !adminState.explorerMode) {
+                sfx.playWarningCue('stalker');
+                state.hp -= 20;
+                document.getElementById('damage-overlay').style.opacity = '0.85';
+                setTimeout(() => document.getElementById('damage-overlay').style.opacity = '0', 350);
+                showToast('👹 DRAWER MIMIC! Something bit your hand (-20 HP)!', 'danger');
+                if (state.hp <= 0) triggerDeath('A Drawer Mimic ambushed you while looting!', '👹');
             } else {
-                showToast('The wooden drawer is empty.', 'info');
+                showToast('Empty drawer...', 'info');
             }
+            if (dData.lootMesh) dData.lootMesh.visible = false;
             updateHUD();
+        } else if (closest.type === 'library_book') {
+            state.quest.foundBooks[closest.bookIndex] = closest.digit;
+            sfx.playCoinOrOrb(false);
+            showToast(`📖 Tome ${closest.romanNum} reveals digit: [ ${closest.digit} ]  (Code so far: ${state.quest.foundBooks.join(' - ')})`, 'admin');
+            updateHUD();
+        } else if (closest.type === 'cipher_desk') {
+            if (document.pointerLockElement) document.exitPointerLock();
+            document.getElementById('cipher-input').value = '';
+            document.getElementById('cipher-hint-text').textContent = `Discovered Digits: ${state.quest.foundBooks.join(' - ')}`;
+            document.getElementById('cipher-modal').classList.remove('hidden');
+        } else if (closest.type === 'lethal_fake_door') {
+            triggerDeath(`You opened decoy Door ${closest.numLabel} during The Hunt! Always remember the next number in sequence.`, '👁️');
         } else if (closest.type === 'lever') {
             if (!state.quest.completed) {
                 state.quest.completed = true;
                 closest.mesh.material.color.setHex(0x22c55e);
                 closest.mesh.material.emissive.setHex(0x15803d);
+                if (closest.leverPivot) closest.leverPivot.rotation.x = -0.5;
                 sfx.playClick(820);
-                showToast('⚡ Power Restored! Exit door unlocked.', 'success');
+                showToast('⚡ Generator Online! Exit door unlocked.', 'success');
                 updateHUD();
             }
         } else if (closest.type === 'key') {
@@ -3407,7 +4534,7 @@
                 closest.mesh.visible = false;
                 state.interactables = state.interactables.filter(i => i !== closest);
                 sfx.playCoinOrOrb(false);
-                showToast('🔑 Collected Ornate Brass Key! Unlock the exit door.', 'success');
+                showToast('🔑 Collected Ornate Skeleton Key! Unlock the exit door.', 'success');
                 updateHUD();
             }
         } else if (closest.type === 'door') {
@@ -3449,25 +4576,40 @@
                 buildSeamlessChainFrom(state.roomNumber);
                 return;
             }
-        } else if (state.roomNumber + 1 >= 0) {
-            saveData.coins += 1000;
+        } else if (state.mode === 'abyss' && state.roomNumber + 1 >= 0) {
+            // ABYSS DEPTH 0 CUTSCENE: Stepping back to Door 0 causes the ground to collapse into THE MAGMA DEPTHS!
+            state.isPlaying = false;
+            sfx.playJumpscare();
+            const cut = document.getElementById('cutscene-overlay');
+            cut.classList.remove('hidden');
+            setTimeout(() => {
+                cut.classList.add('hidden');
+                state.mode = 'magma';
+                state.roomNumber = 1;
+                state.magmaHeat = 0;
+                state.isPlaying = true;
+                document.getElementById('abyss-overlay').style.opacity = '0';
+                document.getElementById('hud-abyss-meter').classList.remove('hidden');
+                buildSeamlessChainFrom(1);
+                showToast('🌋 WELCOME TO THE MAGMA DEPTHS — Stand on Blue Cryo-Vents to cool off!', 'warning');
+            }, 3400);
+            return;
+        } else if (state.mode === 'magma' && state.roomNumber >= 25) {
+            saveData.coins += 1500;
             persistSave();
             triggerVictory();
             return;
         }
 
-        // Prune rooms older than the immediately previous room so you can still look back through the doorway behind you!
-        while (state.activeRooms.length > 2) {
-            const oldRoom = state.activeRooms.shift();
-            worldGroup.remove(oldRoom.group);
-            state.interactables = state.interactables.filter(it => it.roomNumber !== oldRoom.roomNumber);
+        // Sync the rolling [currentRoom - 3, currentRoom + 3] prebuilt room window:
+        // degenerates rooms > 3 doors behind and generates up to 3 doors ahead!
+        const nextRoomNum = state.roomNumber + 1;
+        syncPrebuiltRoomWindow(nextRoomNum);
+
+        const nextRoomObj = state.activeRooms.find(r => r.roomNumber === nextRoomNum);
+        if (nextRoomObj) {
+            activateRoomGameplay(nextRoomObj);
         }
-
-        const nextRoomObj = state.activeRooms[state.activeRooms.length - 1];
-        activateRoomGameplay(nextRoomObj);
-
-        // Pre-generate the room AFTER nextRoomObj so opening its door reveals the real room beyond it!
-        createRoomSegment(nextRoomObj.roomNumber + 1, nextRoomObj.exitWorldPos, nextRoomObj.exitWorldYaw);
         persistSave();
     }
 
@@ -3490,11 +4632,11 @@
         sfx.playJumpscare();
         if (document.pointerLockElement) document.exitPointerLock();
 
-        document.body.classList.add('jumpscare-active');
+        document.body.classList.add('jumpscare-active', 'jumpscare-strobe');
         document.getElementById('damage-overlay').style.opacity = '1';
 
         setTimeout(() => {
-            document.body.classList.remove('jumpscare-active');
+            document.body.classList.remove('jumpscare-active', 'jumpscare-strobe');
             document.getElementById('damage-overlay').style.opacity = '0';
             document.getElementById('game-hud').classList.add('hidden');
             document.getElementById('gameover-modal').classList.remove('hidden');
@@ -3524,16 +4666,29 @@
     // ==================== 13. HUD UPDATE LOOP ====================
     function updateHUD() {
         const isAbyss = state.mode === 'abyss';
-        document.getElementById('hud-zone-label').textContent = isAbyss ? 'THE ABYSS (COLLECT LIGHT)' : 'THE CORRIDOR';
+        const isMagma = state.mode === 'magma';
+        document.getElementById('hud-zone-label').textContent = isAbyss
+            ? 'THE ABYSS (COLLECT LIGHT)'
+            : isMagma
+            ? 'THE MAGMA DEPTHS (VENT HEAT)'
+            : state.roomNumber > 80
+            ? 'MOONLIT WOODLAND TRAIL'
+            : 'THE CORRIDOR';
         document.getElementById('hud-room-number').textContent = isAbyss
             ? `DEPTH ${state.roomNumber}`
+            : isMagma
+            ? `MAGMA ${String(state.roomNumber).padStart(2, '0')} / 25`
             : `DOOR ${String(state.roomNumber).padStart(3, '0')}`;
 
         let qText = 'Proceed through the exit door.';
-        if (state.quest.type === 'lever' && !state.quest.completed) {
-            qText = 'Find and pull the Red Power Lever on the wall.';
+        if (state.quest.type === 'library_cipher' && !state.quest.completed) {
+            qText = `Crouch [C] & collect 4 Tomes (${state.quest.foundBooks.join(' - ')}), then enter code at desk.`;
+        } else if (state.quest.type === 'hunt_maze' && !state.quest.completed) {
+            qText = `THE HUNT: Find & open Door ${String(state.roomNumber + 1).padStart(3, '0')} in the maze!`;
+        } else if (state.quest.type === 'lever' && !state.quest.completed) {
+            qText = 'Find and activate the Industrial Circuit Generator.';
         } else if (state.quest.type === 'key' && !state.quest.completed) {
-            qText = 'Find the Brass Key on a dresser to unlock the door.';
+            qText = 'Find the Ornate Brass Skeleton Key to unlock the door.';
         } else if (state.quest.type === 'abyss_orbs' && !state.quest.completed) {
             qText = `Gather Abyssal Light Orbs (${state.quest.collected}/${state.quest.required}) to unseal exit.`;
         }
@@ -3552,6 +4707,9 @@
         if (isAbyss) {
             document.getElementById('hud-abyss-text').textContent = `${Math.round(state.abyssLight)}%`;
             document.getElementById('hud-abyss-bar').style.width = `${state.abyssLight}%`;
+        } else if (isMagma) {
+            document.getElementById('hud-abyss-text').textContent = `HEAT ${Math.round(state.magmaHeat)}%`;
+            document.getElementById('hud-abyss-bar').style.width = `${state.magmaHeat}%`;
         }
 
         document.getElementById('hud-speed-count').textContent = `Owned: ${saveData.potions.speed || 0}`;
@@ -3559,6 +4717,9 @@
 
         const buffsBar = document.getElementById('active-buffs-bar');
         buffsBar.innerHTML = '';
+        if (state.isCrouching) {
+            buffsBar.innerHTML += `<span class="px-2.5 py-1 rounded-lg bg-zinc-900/90 border border-amber-500/50 text-amber-300">🤫 CROUCHING (SILENT)</span>`;
+        }
         if (state.buffs.speed > 0) {
             buffsBar.innerHTML += `<span class="px-2.5 py-1 rounded-lg bg-emerald-950/90 border border-emerald-500/50 text-emerald-300">⚡ SPEED ${state.buffs.speed.toFixed(1)}s</span>`;
         }
@@ -3619,7 +4780,7 @@
         }
 
         const isMoving = Math.hypot(moveForward, moveRight) > 0.05;
-        const wantsSprint = (keys['ShiftLeft'] || keys['ShiftRight'] || mobileSprint) && isMoving && (state.stamina > 2 || adminState.infStaminaBattery);
+        const wantsSprint = (keys['ShiftLeft'] || keys['ShiftRight'] || mobileSprint) && isMoving && !state.isCrouching && (state.stamina > 2 || adminState.infStaminaBattery);
 
         if (wantsSprint && !adminState.infStaminaBattery) {
             state.stamina = Math.max(0, state.stamina - 22 * dt);
@@ -3630,8 +4791,10 @@
 
         let baseSpeed = 4.3 * (1 + saveData.upgrades.speed * 0.08);
         if (saveData.equippedAccessory === 'chrono_watch') baseSpeed *= 1.1;
+        if (state.isCrouching) baseSpeed *= 0.52;
         if (state.buffs.speed > 0) baseSpeed *= 1.65;
         if (adminState.superSpeed) baseSpeed *= 3.0;
+        baseSpeed *= (adminState.walkspeedMult || 1.0);
         const speed = wantsSprint ? baseSpeed * 1.55 : baseSpeed;
 
         function isPointWalkable(worldPt) {
@@ -3680,10 +4843,10 @@
                     playerPos.z = candidateZ.z;
                 }
 
-                state.stepTimer += dt * (wantsSprint ? 13 : 8.5);
+                state.stepTimer += dt * (wantsSprint ? 13 : state.isCrouching ? 5.5 : 8.5);
                 if (state.stepTimer >= Math.PI) {
                     state.stepTimer = 0;
-                    sfx.playFootstep(wantsSprint);
+                    if (!state.isCrouching) sfx.playFootstep(wantsSprint);
                 }
             }
 
@@ -3691,16 +4854,42 @@
                 if (keys['Space']) playerPos.y += 5.5 * dt;
                 if (keys['KeyC']) playerPos.y -= 5.5 * dt;
             } else {
-                const headBob = isMoving ? Math.sin(state.stepTimer * 2) * (wantsSprint ? 0.055 : 0.03) : 0;
-                playerPos.y = 1.68 + headBob;
+                const targetEyeH = state.isCrouching ? 1.05 : 1.68;
+                const headBob = isMoving ? Math.sin(state.stepTimer * 2) * (wantsSprint ? 0.055 : 0.025) : 0;
+                playerPos.y += ((targetEyeH + headBob) - playerPos.y) * Math.min(1, 12 * dt);
             }
 
+            // Seamless non-teleporting doorway promotion when crossing into the next room
             if (state.currentRoomObj && state.currentRoomObj.doorOpen) {
-                const exitRel = playerPos.clone()
+                const relToExit = playerPos.clone()
                     .sub(state.currentRoomObj.exitWorldPos)
                     .applyAxisAngle(new THREE.Vector3(0, 1, 0), -state.currentRoomObj.exitWorldYaw);
-                if (exitRel.z < -0.55) {
+                if (relToExit.z < -0.65 && Math.abs(relToExit.x) < 1.25) {
                     promoteToNextRoom();
+                }
+            }
+        }
+
+        // 5. The Abyss Light Decay & Magma Depths Volcanic Heat System
+        if (!adminState.explorerMode && state.mode === 'abyss' && !adminState.infStaminaBattery && !adminState.godMode) {
+            const abyssResist = (saveData.equippedFlashlight === 'uv_purifier' ? 0.75 : 1.0) * (saveData.equippedAccessory === 'abyss_gauntlet' ? 0.8 : 1.0);
+            state.abyssLight = Math.max(0, state.abyssLight - 5.2 * abyssResist * dt);
+            if (state.abyssLight <= 0) {
+                triggerDeath('The Abyss swallowed your soul light. Collect Cyan Orbs to survive!', '🌌');
+            }
+        } else if (!adminState.explorerMode && state.mode === 'magma' && !adminState.infStaminaBattery && !adminState.godMode) {
+            let nearVent = false;
+            if (state.currentRoomObj && state.currentRoomObj.coolingVents) {
+                for (const vPos of state.currentRoomObj.coolingVents) {
+                    if (playerPos.distanceTo(vPos) < 2.2) nearVent = true;
+                }
+            }
+            if (nearVent) {
+                state.magmaHeat = Math.max(0, state.magmaHeat - 38 * dt);
+            } else {
+                state.magmaHeat = Math.min(100, state.magmaHeat + 6.5 * dt);
+                if (state.magmaHeat >= 100) {
+                    triggerDeath('The volcanic heat of The Magma Depths consumed you! Cool down at Blue Cryo-Vents.', '🌋');
                 }
             }
         }
@@ -3745,15 +4934,6 @@
         const lookDir = new THREE.Vector3(0, 0, -1).applyEuler(camera.rotation);
         flashSpot.position.copy(camera.position).addScaledVector(lookDir, 0.25);
         flashSpot.target.position.copy(camera.position).addScaledVector(lookDir, 10);
-
-        // 5. The Abyss Light Decay System (-100 to 0)
-        if (state.mode === 'abyss' && !adminState.infStaminaBattery && !adminState.godMode) {
-            const abyssResist = (saveData.equippedFlashlight === 'uv_purifier' ? 0.75 : 1.0) * (saveData.equippedAccessory === 'abyss_gauntlet' ? 0.8 : 1.0);
-            state.abyssLight = Math.max(0, state.abyssLight - 5.2 * abyssResist * dt);
-            if (state.abyssLight <= 0) {
-                triggerDeath('The Abyss swallowed your soul light. Collect Cyan Orbs to survive!', '🌌');
-            }
-        }
 
         // 6. Pickups (Abyssal Light Orbs)
         for (let i = state.pickups.length - 1; i >= 0; i--) {
@@ -3817,12 +4997,51 @@
         }
 
         // 9. Active 3D Entities AI, Flickering Lights & Combat
-        const isInvisible = state.buffs.invis > 0 || state.isHiding || adminState.godMode;
+        let behindTreeCover = false;
+        if (state.currentRoomObj && state.currentRoomObj.treeCovers) {
+            for (const tPos of state.currentRoomObj.treeCovers) {
+                if (playerPos.distanceTo(tPos) < 1.55) {
+                    behindTreeCover = true;
+                    break;
+                }
+            }
+        }
+        const isInvisible = state.buffs.invis > 0 || state.isHiding || behindTreeCover || adminState.godMode;
 
         for (let i = state.activeEntities.length - 1; i >= 0; i--) {
             const ent = state.activeEntities[i];
 
-            if (ent.type === 'rusher') {
+            if (ent.type === 'librarian') {
+                // Blind acoustic monster: patrols calmly unless player moves while NOT crouching!
+                const targetPos = new THREE.Vector3(playerPos.x, 0, playerPos.z);
+                const dist = ent.mesh.position.distanceTo(targetPos);
+                const makingNoise = isMoving && !state.isCrouching && !isInvisible;
+
+                if (makingNoise) {
+                    const dir = new THREE.Vector3().subVectors(targetPos, ent.mesh.position).normalize();
+                    ent.mesh.position.addScaledVector(dir, ent.speed * 1.65 * dt);
+                    ent.mesh.lookAt(targetPos);
+                } else {
+                    ent.patrolAngle += 0.65 * dt;
+                    const patrolTarget = localToWorld(ent.roomObj, Math.sin(ent.patrolAngle) * 3.5, 0, -14 + Math.cos(ent.patrolAngle) * 7.5);
+                    const pDir = new THREE.Vector3().subVectors(patrolTarget, ent.mesh.position);
+                    if (pDir.length() > 0.2) {
+                        pDir.normalize();
+                        ent.mesh.position.addScaledVector(pDir, ent.speed * 0.65 * dt);
+                        ent.mesh.lookAt(patrolTarget);
+                    }
+                }
+
+                const walkCycle = elapsed * (makingNoise ? 11 : 5.5);
+                ent.mesh.userData.leftLeg.rotation.x = Math.sin(walkCycle) * 0.55;
+                ent.mesh.userData.rightLeg.rotation.x = -Math.sin(walkCycle) * 0.55;
+                ent.mesh.userData.leftArm.rotation.x = -0.35 - Math.sin(walkCycle) * 0.45;
+                ent.mesh.userData.rightArm.rotation.x = -0.35 + Math.sin(walkCycle) * 0.45;
+
+                if (!isInvisible && dist < 1.45) {
+                    triggerDeath('The Blind Librarian heard your footsteps! Always crouch [C] inside the Library.', '🤫');
+                }
+            } else if (ent.type === 'rusher') {
                 state.roomLights.forEach(rl => {
                     rl.light.intensity = Math.random() > 0.45 ? rl.baseIntensity * 1.6 : 0.05;
                 });
@@ -3846,6 +5065,7 @@
                 ent.life -= dt;
                 ent.mesh.lookAt(playerPos.x, 0, playerPos.z);
                 ent.mesh.position.y = Math.sin(elapsed * 3.5) * 0.12;
+                if (ent.mesh.userData.halo) ent.mesh.userData.halo.rotation.z += 1.8 * dt;
 
                 const toEnt = new THREE.Vector3().subVectors(ent.mesh.position, playerPos).setY(0).normalize();
                 const camFlat = lookDir.clone().setY(0).normalize();
@@ -3868,45 +5088,57 @@
                     document.getElementById('damage-overlay').style.opacity = '0';
                     document.getElementById('entity-sign-banner').classList.add('hidden');
                 }
-            } else if (ent.type === 'stalker') {
+            } else {
+                // Stalker, Hound, Moss Golem, Forest Goblin, and Magma Fiend
                 const targetPos = new THREE.Vector3(playerPos.x, 0, playerPos.z);
                 const dir = new THREE.Vector3().subVectors(targetPos, ent.mesh.position);
                 const dist = dir.length();
 
-                if (!isInvisible && dist > 0.8) {
+                if (!isInvisible && dist > 0.85) {
                     dir.normalize();
                     ent.mesh.position.addScaledVector(dir, ent.speed * dt);
                     ent.mesh.lookAt(targetPos);
 
-                    const walkCycle = elapsed * 9;
-                    ent.mesh.userData.leftLeg.rotation.x = Math.sin(walkCycle) * 0.6;
-                    ent.mesh.userData.rightLeg.rotation.x = -Math.sin(walkCycle) * 0.6;
-                    ent.mesh.userData.leftArm.rotation.x = -0.42 - Math.sin(walkCycle) * 0.4;
-                    ent.mesh.userData.rightArm.rotation.x = -0.42 + Math.sin(walkCycle) * 0.4;
-                }
-
-                const toStalker = new THREE.Vector3().subVectors(ent.mesh.position, playerPos).normalize();
-                if (state.flashlightOn && state.battery > 0 && toStalker.dot(lookDir) > 0.78 && dist < flSpec.range) {
-                    const burnDmg = (state.combatBeam ? 68 : 22) * flSpec.burnPower * dt;
-                    ent.hp -= burnDmg;
-                    ent.mesh.position.x += (Math.random() - 0.5) * 0.08;
-                    if (ent.hp <= 0) {
-                        worldGroup.remove(ent.mesh);
-                        state.activeEntities.splice(i, 1);
-                        saveData.coins += 25;
-                        state.sessionCoins += 25;
-                        sfx.playCoinOrOrb(true);
-                        document.getElementById('entity-sign-banner').classList.add('hidden');
-                        showToast('🔥 Stalker banished with light! +25 Coins', 'success');
-                        continue;
+                    const walkCycle = elapsed * (ent.type === 'golem' ? 5.5 : 10);
+                    if (ent.mesh.userData.leftLeg) {
+                        ent.mesh.userData.leftLeg.rotation.x = Math.sin(walkCycle) * 0.6;
+                        ent.mesh.userData.rightLeg.rotation.x = -Math.sin(walkCycle) * 0.6;
+                        ent.mesh.userData.leftArm.rotation.x = -0.35 - Math.sin(walkCycle) * 0.45;
+                        ent.mesh.userData.rightArm.rotation.x = -0.35 + Math.sin(walkCycle) * 0.45;
                     }
                 }
 
-                if (!isInvisible && dist < 1.25) {
-                    state.hp -= 45 * dt;
+                if (typeof ent.hp === 'number') {
+                    const toEnt = new THREE.Vector3().subVectors(ent.mesh.position, playerPos).normalize();
+                    if (state.flashlightOn && state.battery > 0 && toEnt.dot(lookDir) > 0.78 && dist < flSpec.range) {
+                        const burnDmg = (state.combatBeam ? 68 : 22) * flSpec.burnPower * dt;
+                        ent.hp -= burnDmg;
+                        ent.mesh.position.x += (Math.random() - 0.5) * 0.08;
+                        if (ent.hp <= 0) {
+                            worldGroup.remove(ent.mesh);
+                            state.activeEntities.splice(i, 1);
+                            saveData.coins += 25;
+                            state.sessionCoins += 25;
+                            sfx.playCoinOrOrb(true);
+                            document.getElementById('entity-sign-banner').classList.add('hidden');
+                            showToast('🔥 Entity banished with light! +25 Coins', 'success');
+                            continue;
+                        }
+                    }
+                }
+
+                if (!isInvisible && dist < 1.32) {
+                    state.hp -= 48 * dt;
                     document.getElementById('damage-overlay').style.opacity = '0.75';
                     if (state.hp <= 0) {
-                        triggerDeath('The Stalker ambushed you from behind. Turn and burn it with your flashlight!', '🐺');
+                        const deathNames = {
+                            golem: 'A Moss Golem crushed you on the woodland path! Hide behind tree trunks!',
+                            goblin: 'A Forest Goblin ambushed you from the brush! Hide behind trees!',
+                            hound: 'The Hunt Hound caught your scent in the labyrinth!',
+                            magma_fiend: 'A Magma Fiend incinerated you in the volcanic cavern!',
+                            stalker: 'The Stalker ambushed you from behind. Turn and burn it with your flashlight!'
+                        };
+                        triggerDeath(deathNames[ent.type] || 'An entity consumed you in the dark.', '👹');
                     }
                 } else {
                     document.getElementById('damage-overlay').style.opacity = '0';
@@ -3933,6 +5165,7 @@
     // Boot Sequence
     window.onload = function () {
         playerRig.visible = false;
+        prebuildAllBlueprints();
         detectDeviceMode();
         refreshMenuUI();
         animate();
